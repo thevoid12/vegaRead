@@ -10,4 +10,6 @@ pub struct ApplicationError {
 pub mod codes {
     /// Failed to read/create the directory (permissions, not found, etc.)
     pub const DIRECTORY_ERROR: u8 = 1;
+    /// Database-related errors
+    pub const DATABASE_ERROR: u8 = 2;
 }
