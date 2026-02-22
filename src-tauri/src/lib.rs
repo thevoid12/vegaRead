@@ -2,7 +2,7 @@ mod db;
 mod errors;
 mod handlers;
 mod util;
-mod epub;
+mod epub_util;
 use handlers as handler;
 use tauri::Manager;
 

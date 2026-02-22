@@ -3,7 +3,7 @@
 
 use crate::util;
 use crate::errors::ApplicationError;
-use epub::doc::EpubDoc;
+use crate::epub_util;
 
 // what all we need to do while initialization is added here
 // init is the first function we call
@@ -17,26 +17,26 @@ fn init(app: &tauri::AppHandle) -> Result<(), ApplicationError> {
 #[tauri::command]
 pub fn show_home_page_handler(app: tauri::AppHandle) -> Result<String, ApplicationError> {
     init(&app)?;
-    load_file_handler(app,"")?;
-    Ok("welcome to Vega Read. Please import new ebook or continue reading from the existing collection".to_string())
+    let content=load_file_handler(app,"")?;
+    Ok(format!{"welcome to Vega Read. Please import new ebook or continue reading from the existing collection. content:{}",content})
 }
 
 // this handler is called when user uploads a file
 #[tauri::command]
-pub fn load_file_handler(app: tauri::AppHandle,mut file_path: &str) -> Result<(),ApplicationError> { // TODO: remove the mut here after testing // for now we can overwrite it the hardcoded filepath but // this will come from ui
+pub fn load_file_handler(app: tauri::AppHandle,mut file_path: &str) -> Result<String,ApplicationError> { // TODO: remove the mut here after testing // for now we can overwrite it the hardcoded filepath but // this will come from ui
 file_path="/home/void/Downloads/dopamine_detox.epub";
 
 let new_fp=util::copy_to_app_directory(&app,file_path)?;
 println!("the new updated file path is:{}",new_fp);
+let metadata= epub_util::extract_epub_metadata(&new_fp)?;
+// TODO: store the metadata in the db and other details in the db
 
-// if let Some(resource) = doc.resources.get("titlepage.xhtml") {
-//     let test = resource.path.clone();
-//     println!("the titlepage path is {:?}", test);
-// } else {
-//     println!("titlepage.xhtml not found in resources");
-// }
-// //TODO: while opening the app for first time we can set a inernal folder for all
-// // of this project related
-// // todo!();
-Ok(())
+// Open the book!
+// step1: check for db for where we stopped,if nothing we start from first
+let content=epub_util::get_paginated_content(&new_fp,0,0,100)?;
+
+// read the first n pages current index is 0
+// then next n chunk
+
+Ok(content)
 }
