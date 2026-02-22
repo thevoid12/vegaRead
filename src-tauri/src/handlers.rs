@@ -26,19 +26,9 @@ pub fn show_home_page_handler(app: tauri::AppHandle) -> Result<String, Applicati
 pub fn load_file_handler(app: tauri::AppHandle,mut file_path: &str) -> Result<(),ApplicationError> { // TODO: remove the mut here after testing // for now we can overwrite it the hardcoded filepath but // this will come from ui
 file_path="/home/void/Downloads/dopamine_detox.epub";
 
-let fp=util::copy_to_app_directory(&app,file_path)?;
-println!("the new updated file path is:{}",fp);
-// let doc = EpubDoc::new(file_path);
-// let mut doc = doc.unwrap();
-// assert_eq!(0, doc.get_current_chapter());
-// assert_eq!("application/xhtml+xml", doc.get_current_mime().unwrap());
-// println!("current chapter:{:?}",doc.get_current_chapter());
-// let mut metadata_map: std::collections::HashMap<String, Vec<String>> = std::collections::HashMap::new();
-// for item in &doc.metadata {
-//     metadata_map.entry(item.property.clone()).or_default().push(item.value.clone());
-// }
-// let metadata_json = serde_json::to_string_pretty(&metadata_map).unwrap();
-// println!("{}", metadata_json);
+let new_fp=util::copy_to_app_directory(&app,file_path)?;
+println!("the new updated file path is:{}",new_fp);
+
 // if let Some(resource) = doc.resources.get("titlepage.xhtml") {
 //     let test = resource.path.clone();
 //     println!("the titlepage path is {:?}", test);

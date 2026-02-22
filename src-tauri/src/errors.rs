@@ -12,4 +12,6 @@ pub mod codes {
     pub const DIRECTORY_ERROR: u8 = 1;
     /// Database-related errors
     pub const DATABASE_ERROR: u8 = 2;
+    /// Epub related errors
+    pub const EPUB_ERROR: u8 = 3;
 }
