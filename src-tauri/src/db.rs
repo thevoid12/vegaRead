@@ -5,16 +5,25 @@ use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 use sqlx::SqlitePool;
 use std::str::FromStr;
 use tauri::Manager;
+use crate::util;
 
 /// Creates the SQLite connection pool.
 /// The DB file is placed inside the Tauri app-data directory.
+/// On first launch (when vagaread.db doesn't exist), the schema is created.
 pub async fn init_db(app: &tauri::AppHandle) -> Result<SqlitePool, ApplicationError> {
     let data_dir = app.path().app_data_dir().map_err(|e| ApplicationError {
         code: codes::DIRECTORY_ERROR,
         message: Some(format!("unable to resolve app data dir: {e}")),
     })?;
 
+    util::create_app_directory(app)?;
+    // std::fs::create_dir_all(&data_dir).map_err(|e| ApplicationError {
+    //     code: codes::DIRECTORY_ERROR,
+    //     message: Some(format!("unable to create app data dir: {e}")),
+    // })?;
+
     let db_path = data_dir.join("vagaread.db");
+    let is_new_db = !db_path.exists();
 
     let options = SqliteConnectOptions::from_str(
         db_path
@@ -39,28 +48,22 @@ pub async fn init_db(app: &tauri::AppHandle) -> Result<SqlitePool, ApplicationEr
             message: Some(format!("failed to open database: {e}")),
         })?;
 
-    // Run migrations / create tables here
-    create_tables(&pool).await?;
+    if is_new_db {
+        create_tables(&pool).await?;
+    }
 
     Ok(pool)
 }
 
-/// Create your tables. Add more CREATE TABLE statements as needed.
+// we create the initial schema which is in /migrations/schema.sql
 async fn create_tables(pool: &SqlitePool) -> Result<(), ApplicationError> {
-    sqlx::query(
-        "CREATE TABLE IF NOT EXISTS books (
-            id    INTEGER PRIMARY KEY AUTOINCREMENT,
-            title TEXT NOT NULL,
-            path  TEXT NOT NULL,
-            added_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        )",
-    )
-    .execute(pool)
-    .await
-    .map_err(|e| ApplicationError {
-        code: codes::DATABASE_ERROR,
-        message: Some(format!("failed to create tables: {e}")),
-    })?;
+    sqlx::raw_sql(include_str!("../migrations/schema.sql"))
+        .execute(pool)
+        .await
+        .map_err(|e| ApplicationError {
+            code: codes::DATABASE_ERROR,
+            message: Some(format!("failed to create tables: {e}")),
+        })?;
 
     Ok(())
 }

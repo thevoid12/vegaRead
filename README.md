@@ -10,3 +10,7 @@ sqlx migrate add <migration_name>
 ```sh
 sqlx migrate run   
 ```
+- you can find the internal folder at:
+```sh 
+/home/void/.local/share/com.void.vagaread/
+```

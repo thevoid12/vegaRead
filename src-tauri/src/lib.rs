@@ -3,6 +3,7 @@ mod errors;
 mod handlers;
 mod util;
 mod epub_util;
+mod models;
 use handlers as handler;
 use tauri::Manager;
 
