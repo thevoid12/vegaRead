@@ -4,6 +4,8 @@ mod handlers;
 mod util;
 mod epub_util;
 mod models;
+#[path = "../migrations/queries.rs"]
+mod queries;
 use handlers as handler;
 use tauri::Manager;
 

@@ -6,6 +6,7 @@ use sqlx::SqlitePool;
 use std::str::FromStr;
 use tauri::Manager;
 use crate::util;
+use crate::models;
 
 /// Creates the SQLite connection pool.
 /// The DB file is placed inside the Tauri app-data directory.
@@ -63,6 +64,23 @@ async fn create_tables(pool: &SqlitePool) -> Result<(), ApplicationError> {
         .map_err(|e| ApplicationError {
             code: codes::DATABASE_ERROR,
             message: Some(format!("failed to create tables: {e}")),
+        })?;
+
+    Ok(())
+}
+
+pub async fn create_record(pool: &SqlitePool, vr: models::vagaread) -> Result<(), ApplicationError> {
+    sqlx::query(crate::queries::CREATE_VB_RECORD)
+        .bind(vr.vagaread_id.to_string())
+        .bind(vr.internal_fp)
+        .bind(vr.meta_data)
+        .bind(vr.current_read_idx as i64)
+        .bind(vr.current_spine as i64)
+        .execute(pool)
+        .await
+        .map_err(|e| ApplicationError {
+            code: codes::DATABASE_ERROR,
+            message: Some(format!("failed to create record: {e}")),
         })?;
 
     Ok(())
