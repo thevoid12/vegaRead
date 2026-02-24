@@ -50,6 +50,7 @@ async fn load_file_core(app: &tauri::AppHandle, mut file_path: &str, pool: &Sqli
         meta_data: metadata,
         current_read_idx: 0,
         current_spine: 0,
+        is_deleted: false,
     };
     db::create_record(pool, vr_record).await?;
     // Open the book!

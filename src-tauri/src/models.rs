@@ -6,7 +6,14 @@ pub const PAGINATE_CHAR: usize=1_000_000;
 pub struct vagaread{
     pub vagaread_id: uuid::Uuid,
     pub internal_fp: String,
-    pub meta_data: String, 
-    pub current_read_idx: usize, 
-    pub current_spine:usize,
+    pub meta_data: String,
+    pub current_read_idx: usize,
+    pub current_spine: usize,
+    pub is_deleted: bool,
+}
+
+pub struct update_vr{
+    pub vagaread_id: String, // primary key
+    pub current_read_idx: usize,
+    pub current_spine: usize,
 }

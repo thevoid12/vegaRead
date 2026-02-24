@@ -69,18 +69,34 @@ async fn create_tables(pool: &SqlitePool) -> Result<(), ApplicationError> {
     Ok(())
 }
 
-pub async fn create_record(pool: &SqlitePool, vr: models::vagaread) -> Result<(), ApplicationError> {
+pub async fn create_record(pool: &SqlitePool, data_model: models::vagaread) -> Result<(), ApplicationError> {
     sqlx::query(crate::queries::CREATE_VB_RECORD)
-        .bind(vr.vagaread_id.to_string())
-        .bind(vr.internal_fp)
-        .bind(vr.meta_data)
-        .bind(vr.current_read_idx as i64)
-        .bind(vr.current_spine as i64)
+        .bind(data_model.vagaread_id.to_string())
+        .bind(data_model.internal_fp)
+        .bind(data_model.meta_data)
+        .bind(data_model.current_read_idx.to_string())
+        .bind(data_model.current_spine.to_string())
+        .bind(data_model.is_deleted)
         .execute(pool)
         .await
         .map_err(|e| ApplicationError {
             code: codes::DATABASE_ERROR,
             message: Some(format!("failed to create record: {e}")),
+        })?;
+
+    Ok(())
+}
+
+pub async fn update_vb_record(pool: &SqlitePool, data_model: models::update_vr) -> Result<(), ApplicationError> {
+    sqlx::query(crate::queries::UPDATE_VB_RECORD)
+        .bind(data_model.current_read_idx.to_string())
+        .bind(data_model.current_spine.to_string())
+        .bind(data_model.vagaread_id)
+        .execute(pool)
+        .await
+        .map_err(|e| ApplicationError {
+            code: codes::DATABASE_ERROR,
+            message: Some(format!("failed to update record: {e}")),
         })?;
 
     Ok(())
