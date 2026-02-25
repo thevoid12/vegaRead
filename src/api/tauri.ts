@@ -10,10 +10,9 @@ export async function fetchAllBooks(): Promise<Book[]> {
 }
 
 /**
- * Imports an EPUB file into the library.
- * Maps to the Rust `load_file_handler` command.
- * Returns the initial paginated content chunk.
+ * Imports an EPUB file into the library by its absolute path on disk.
+ * Maps to the Rust `upload_file_handler` command.
  */
-export async function loadFile(filePath: string): Promise<string> {
-  return invoke<string>('load_file_handler', { filePath });
+export async function uploadFile(filePath: string): Promise<string> {
+  return invoke<string>('upload_file_handler', { filePath });
 }

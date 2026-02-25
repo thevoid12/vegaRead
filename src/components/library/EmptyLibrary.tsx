@@ -1,12 +1,11 @@
 interface EmptyLibraryProps {
   onImport: () => void;
-  isImporting: boolean;
 }
 
 /**
  * Shown on the home page when the library has no books yet.
  */
-export function EmptyLibrary({ onImport, isImporting }: EmptyLibraryProps) {
+export function EmptyLibrary({ onImport }: EmptyLibraryProps) {
   return (
     <div className="flex-1 flex flex-col items-center justify-center gap-5 px-8 py-20 text-center">
       {/* Icon container */}
@@ -29,35 +28,30 @@ export function EmptyLibrary({ onImport, isImporting }: EmptyLibraryProps) {
         </p>
       </div>
 
-      {/* CTA */}
+      {/* CTA — opens the ImportModal */}
       <button
         type="button"
         onClick={onImport}
-        disabled={isImporting}
         className="
           inline-flex items-center gap-2
-          bg-accent hover:bg-accent-hover disabled:opacity-60 disabled:cursor-not-allowed
+          bg-accent hover:bg-accent-hover
           text-white rounded-lg px-5 py-2.5
           text-sm font-medium transition-colors duration-150
         "
       >
-        {isImporting ? (
-          <span className="w-4 h-4 rounded-full border-2 border-white border-t-transparent animate-spin" />
-        ) : (
-          <svg
-            className="w-4 h-4"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth={2.5}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            aria-hidden="true"
-          >
-            <path d="M12 4v16m8-8H4" />
-          </svg>
-        )}
-        {isImporting ? 'Importing…' : 'Import Book'}
+        <svg
+          className="w-4 h-4"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={2.5}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
+          <path d="M12 4v16m8-8H4" />
+        </svg>
+        Import Book
       </button>
     </div>
   );

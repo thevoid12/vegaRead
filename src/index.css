@@ -20,6 +20,16 @@
   }
 }
 
+@keyframes toast-in {
+  from { transform: translateY(-0.75rem); opacity: 0; }
+  to   { transform: translateY(0);        opacity: 1; }
+}
+
+@keyframes modal-in {
+  from { transform: translate(-50%, -48%) scale(0.96); opacity: 0; }
+  to   { transform: translate(-50%, -50%) scale(1);    opacity: 1; }
+}
+
 @layer utilities {
   /* Thin scrollbar styled for the light theme */
   .scrollbar-thin {

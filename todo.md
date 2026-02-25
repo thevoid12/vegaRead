@@ -6,3 +6,6 @@
 - [ ] show books list
 - [ ] show chapter lists+book
 - [ ] based on pagination display it else call the newer function 
+- [ ] security: validate and sanitize all incomming requests
+- [ ] thumbnail image is not working, problem with the metadata extraction in rust!
+- [ ] 

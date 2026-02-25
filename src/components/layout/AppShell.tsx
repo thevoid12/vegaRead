@@ -1,8 +1,7 @@
 import type { ReactNode } from 'react';
 
 interface AppShellProps {
-  onImport: () => void;
-  isImporting: boolean;
+  onOpenImport: () => void;
   children: ReactNode;
 }
 
@@ -10,7 +9,7 @@ interface AppShellProps {
  * Root application shell — headerbar + content area.
  * Modelled after Foliate's window layout: compact dark header, scrollable body.
  */
-export function AppShell({ onImport, isImporting, children }: AppShellProps) {
+export function AppShell({ onOpenImport, children }: AppShellProps) {
   return (
     <div className="flex flex-col h-full bg-app-bg text-fg-primary font-sans antialiased">
       {/* ── Headerbar ─────────────────────────────────────────────── */}
@@ -33,34 +32,29 @@ export function AppShell({ onImport, isImporting, children }: AppShellProps) {
         {/* Actions */}
         <button
           type="button"
-          onClick={onImport}
-          disabled={isImporting}
+          onClick={onOpenImport}
           className="
             inline-flex items-center gap-1.5
-            bg-accent hover:bg-accent-hover disabled:opacity-50 disabled:cursor-not-allowed
+            bg-accent hover:bg-accent-hover
             text-white rounded-md px-3 py-1.5
             text-xs font-medium transition-colors duration-150
             focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1 focus-visible:ring-offset-app-surface
           "
           aria-label="Import EPUB book"
         >
-          {isImporting ? (
-            <span className="w-3 h-3 rounded-full border-2 border-white border-t-transparent animate-spin" />
-          ) : (
-            <svg
-              className="w-3.5 h-3.5"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth={2.5}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
-            >
-              <path d="M12 4v16m8-8H4" />
-            </svg>
-          )}
-          {isImporting ? 'Importing…' : 'Import Book'}
+          <svg
+            className="w-3.5 h-3.5"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={2.5}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M12 4v16m8-8H4" />
+          </svg>
+          Import Book
         </button>
       </header>
 

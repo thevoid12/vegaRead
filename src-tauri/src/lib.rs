@@ -13,6 +13,7 @@ use tauri::Manager;
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             let handle = app.handle().clone();// handle is a clone of the apphandler. its tauri's reference to the running application. 
             // app handler is similar to ctx in golang but this app handler carries app-wide data and services for the entire lifetime of the app unlike ctx
@@ -24,7 +25,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             handler::show_home_page_handler,
-            handler::load_file_handler,
+            handler::upload_file_handler,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

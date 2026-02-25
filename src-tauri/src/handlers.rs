@@ -34,7 +34,8 @@ pub async fn show_home_page_handler(app: tauri::AppHandle, pool: State<'_, Sqlit
 
 // this handler is called when user uploads a file
 #[tauri::command]
-pub async fn load_file_handler(app: tauri::AppHandle, file_path: String, pool: State<'_, SqlitePool>) -> Result<String, ApplicationError> {
+pub async fn upload_file_handler(app: tauri::AppHandle, file_path: String, pool: State<'_, SqlitePool>) -> Result<String, ApplicationError> {
+    // TODO: backend sanitization and validation needs to be learnt and done
     load_file_core(&app, &file_path, pool.inner()).await
 }
 
@@ -48,10 +49,7 @@ async fn list_all_books(pool: &SqlitePool) -> Result<Vec<models::vagaread>, Appl
 
 
 // core logic shared by both handlers — takes &SqlitePool directly, no State wrapper
-async fn load_file_core(app: &tauri::AppHandle, mut file_path: &str, pool: &SqlitePool) -> Result<String, ApplicationError> {
-    // TODO: remove the hardcoded path after testing
-    file_path = "/home/void/Downloads/dopamine_detox.epub";
-
+async fn load_file_core(app: &tauri::AppHandle, file_path: &str, pool: &SqlitePool) -> Result<String, ApplicationError> {
     let new_fp = util::copy_to_app_directory(app, file_path)?;
     println!("the new updated file path is:{}", new_fp);
     let metadata_str = epub_util::extract_epub_metadata(&new_fp)?;

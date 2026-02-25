@@ -5,9 +5,8 @@ import { EmptyLibrary } from './EmptyLibrary';
 interface LibraryPageProps {
   books: Book[];
   isLoading: boolean;
-  isImporting: boolean;
   onBookClick: (book: Book) => void;
-  onImport: () => void;
+  onOpenImport: () => void;
 }
 
 /**
@@ -18,9 +17,8 @@ interface LibraryPageProps {
 export function LibraryPage({
   books,
   isLoading,
-  isImporting,
   onBookClick,
-  onImport,
+  onOpenImport,
 }: LibraryPageProps) {
   if (isLoading) {
     return (
@@ -31,7 +29,7 @@ export function LibraryPage({
   }
 
   if (books.length === 0) {
-    return <EmptyLibrary onImport={onImport} isImporting={isImporting} />;
+    return <EmptyLibrary onImport={onOpenImport} />;
   }
 
   return (
