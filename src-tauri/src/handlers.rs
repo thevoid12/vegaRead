@@ -19,14 +19,17 @@ use tauri::State;
 // this will be the first screen that user sees when he opens
 // vaga read
 #[tauri::command]
-pub async fn show_home_page_handler(app: tauri::AppHandle, pool: State<'_, SqlitePool>) -> Result<String, ApplicationError> {
+pub async fn show_home_page_handler(app: tauri::AppHandle, pool: State<'_, SqlitePool>) -> Result<Vec<models::vagaread>, ApplicationError> {
     // init(&app)?;
-    let content = load_file_core(&app, "", pool.inner()).await.map_err(|e| {
-        println!("the error is err {:?}", e);
+    // let content = load_file_core(&app, "", pool.inner()).await.map_err(|e| {
+    //     println!("the error is err {:?}", e);
+    //     e
+    // })?;
+        list_all_books(pool.inner()).await.map_err(|e|{
+               println!("the error is err {:?}", e);
         e
-    })?;
-    
-    Ok(format!{"welcome to Vega Read. Please import new ebook or continue reading from the existing collection. content:{}",content})
+        })
+    // Ok(format!{"welcome to Vega Read. Please import new ebook or continue reading from the existing collection. content:{}",content})
 }
 
 // this handler is called when user uploads a file
@@ -34,6 +37,15 @@ pub async fn show_home_page_handler(app: tauri::AppHandle, pool: State<'_, Sqlit
 pub async fn load_file_handler(app: tauri::AppHandle, file_path: String, pool: State<'_, SqlitePool>) -> Result<String, ApplicationError> {
     load_file_core(&app, &file_path, pool.inner()).await
 }
+
+
+// core logic shared by both handlers — takes &SqlitePool directly, no State wrapper
+async fn list_all_books(pool: &SqlitePool) -> Result<Vec<models::vagaread>, ApplicationError> {
+ 
+    let records=db::list_all_vb_records(pool).await?;
+    Ok(records)
+}
+
 
 // core logic shared by both handlers — takes &SqlitePool directly, no State wrapper
 async fn load_file_core(app: &tauri::AppHandle, mut file_path: &str, pool: &SqlitePool) -> Result<String, ApplicationError> {
