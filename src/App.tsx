@@ -1,39 +1,68 @@
-import { useState, useEffect } from "react";
-import reactLogo from "./assets/react.svg";
-import { invoke } from "@tauri-apps/api/core";
-import "./App.css";
+import { useState, useEffect, useCallback } from 'react';
+import { AppShell } from './components/layout/AppShell';
+import { LibraryPage } from './components/library/LibraryPage';
+import { fetchAllBooks, loadFile } from './api/tauri';
+import type { Book } from './types';
 
 function App() {
-  const [greetMsg, setGreetMsg] = useState("");
-  // const [name, setName] = useState("");
+  const [books, setBooks]             = useState<Book[]>([]);
+  const [isLoading, setIsLoading]     = useState(true);
+  const [isImporting, setIsImporting] = useState(false);
+  const [error, setError]             = useState<string | null>(null);
 
-  // async function greet() {
-  //   setGreetMsg(await invoke("greet", { name }));
-  // }
-async function show_home_page(){
-  setGreetMsg(await invoke("show_home_page_handler"));
-}
+  const refreshLibrary = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      const result = await fetchAllBooks();
+      setBooks(result);
+    } catch (err) {
+      console.error('Failed to load library:', err);
+      setError('Failed to load library. Please restart the app.');
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    show_home_page();
-  }, []);
-  return (
-    <main className="container">
-      <h1>Welcome to void world</h1>
+    refreshLibrary();
+  }, [refreshLibrary]);
 
-      {/* <div className="row">
-        <a href="https://vite.dev" target="_blank">
-          <img src="/vite.svg" className="logo vite" alt="Vite logo" />
-        </a>
-        <a href="https://tauri.app" target="_blank">
-          <img src="/tauri.svg" className="logo tauri" alt="Tauri logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div> */}
-      <p>{greetMsg}</p>
-    </main>
+  const handleImport = useCallback(async () => {
+    if (isImporting) return;
+    try {
+      setIsImporting(true);
+      // file_path is currently hardcoded on the Rust side for development
+      await loadFile('');
+      await refreshLibrary();
+    } catch (err) {
+      console.error('Failed to import book:', err);
+    } finally {
+      setIsImporting(false);
+    }
+  }, [isImporting, refreshLibrary]);
+
+  const handleBookClick = useCallback((book: Book) => {
+    // TODO: navigate to reading view
+    console.log('Open book:', book.vagaread_id);
+  }, []);
+
+  return (
+    <AppShell onImport={handleImport} isImporting={isImporting}>
+      {error ? (
+        <div className="flex-1 flex items-center justify-center">
+          <p className="text-red-400 text-sm">{error}</p>
+        </div>
+      ) : (
+        <LibraryPage
+          books={books}
+          isLoading={isLoading}
+          isImporting={isImporting}
+          onBookClick={handleBookClick}
+          onImport={handleImport}
+        />
+      )}
+    </AppShell>
   );
 }
 
