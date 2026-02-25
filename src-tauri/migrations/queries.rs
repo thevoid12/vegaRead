@@ -4,3 +4,6 @@ pub const CREATE_VB_RECORD: &str =
 
 pub const UPDATE_VB_RECORD: &str =
     "UPDATE vagaread SET current_read_idx = ?, current_spine = ?, updated_on = datetime('now') WHERE id = ?";
+
+pub const LIST_ALL_RECORD: &str =
+"SELECT * FROM vagaread where is_deleted=false";

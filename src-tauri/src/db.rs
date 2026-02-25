@@ -73,7 +73,7 @@ pub async fn create_record(pool: &SqlitePool, data_model: models::vagaread) -> R
     sqlx::query(crate::queries::CREATE_VB_RECORD)
         .bind(data_model.vagaread_id.to_string())
         .bind(data_model.internal_fp)
-        .bind(data_model.meta_data)
+        .bind(data_model.meta_data.to_string())
         .bind(data_model.current_read_idx.to_string())
         .bind(data_model.current_spine.to_string())
         .bind(data_model.is_deleted)
@@ -100,4 +100,54 @@ pub async fn update_vb_record(pool: &SqlitePool, data_model: models::update_vr) 
         })?;
 
     Ok(())
+    }
+
+pub async fn list_all_vb_records(pool: &SqlitePool) -> Result<Vec<models::vagaread>, ApplicationError> {
+    use sqlx::Row;
+
+    let rows = sqlx::query(crate::queries::LIST_ALL_RECORD)
+        .fetch_all(pool)
+        .await
+        .map_err(|e| ApplicationError {
+            code: codes::DATABASE_ERROR,
+            message: Some(format!("failed to list records: {e}")),
+        })?;
+
+    let records = rows
+        .iter()
+        .map(|row| -> Result<models::vagaread, ApplicationError> {
+            let vagaread_id = uuid::Uuid::parse_str(row.get::<&str, _>("id"))
+                .map_err(|e| ApplicationError {
+                    code: codes::DATABASE_ERROR,
+                    message: Some(format!("invalid uuid in db: {e}")),
+                })?;
+            let current_read_idx = row.get::<&str, _>("current_read_idx")
+                .parse::<usize>()
+                .map_err(|e| ApplicationError {
+                    code: codes::DATABASE_ERROR,
+                    message: Some(format!("invalid current_read_idx in db: {e}")),
+                })?;
+            let current_spine = row.get::<&str, _>("current_spine")
+                .parse::<usize>()
+                .map_err(|e| ApplicationError {
+                    code: codes::DATABASE_ERROR,
+                    message: Some(format!("invalid current_spine in db: {e}")),
+                })?;
+            let meta: serde_json::Value = serde_json::from_str(row.get::<&str, _>("meta_data"))
+                .map_err(|e| ApplicationError {
+                    code: codes::DATABASE_ERROR,
+                    message: Some(format!("invalid metadata json in db: {e}")),
+                })?;
+            Ok(models::vagaread {
+                vagaread_id,
+                internal_fp: row.get("internal_book_path"),
+                meta_data: meta,
+                current_read_idx,
+                current_spine,
+                is_deleted: row.get("is_deleted"),
+            })
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+
+    Ok(records)
 }

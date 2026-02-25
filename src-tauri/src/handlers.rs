@@ -42,7 +42,11 @@ async fn load_file_core(app: &tauri::AppHandle, mut file_path: &str, pool: &Sqli
 
     let new_fp = util::copy_to_app_directory(app, file_path)?;
     println!("the new updated file path is:{}", new_fp);
-    let metadata = epub_util::extract_epub_metadata(&new_fp)?;
+    let metadata_str = epub_util::extract_epub_metadata(&new_fp)?;
+    let metadata: serde_json::Value = serde_json::from_str(&metadata_str).map_err(|e| ApplicationError {
+        code: crate::errors::codes::DATABASE_ERROR,
+        message: Some(format!("invalid metadata json: {e}")),
+    })?;
     // TODO: store the metadata in the db and other details in the db
     let vr_record = models::vagaread{
         vagaread_id: Uuid::new_v4(),
