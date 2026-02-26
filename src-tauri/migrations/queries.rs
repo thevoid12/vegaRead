@@ -7,3 +7,6 @@ pub const UPDATE_VB_RECORD: &str =
 
 pub const LIST_ALL_RECORD: &str =
 "SELECT * FROM vagaread where is_deleted=false";
+
+pub const GET_VB_RECORD_BY_ID: &str =
+"SELECT * FROM vagaread where id=? AND is_deleted=false";

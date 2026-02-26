@@ -18,3 +18,18 @@ pub struct update_vr{
     pub current_read_idx: usize,
     pub current_spine: usize,
 }
+
+#[derive(serde::Serialize)]
+pub struct book_response{
+    pub vagaread_id: uuid::Uuid, // Unique id for the book
+    pub book_content: String,
+}
+
+#[derive(serde::Serialize)]
+pub struct SpineItemResponse {
+    pub idref: String,
+    pub id: Option<String>,
+    pub properties: Option<String>,
+    pub linear: bool,
+}
+

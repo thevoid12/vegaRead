@@ -1,8 +1,7 @@
 // everything related to epub is done here!
 
-use crate::errors::{codes, ApplicationError};
+use crate::{errors::{ApplicationError, codes}, models};
 use epub::doc::EpubDoc;
-use epub::doc::SpineItem;
 use std::collections::HashMap;
 
 pub fn extract_epub_metadata(fp: &str) ->Result<String,ApplicationError>{
@@ -21,15 +20,18 @@ Ok(metadata_json)
 }
 
 // spine gives us the ordering for the epub files
-pub fn get_epub_spine(fp: &str) ->Result<Vec<SpineItem>,ApplicationError>{
-   let doc = EpubDoc::new(fp).map_err(|e| ApplicationError {
-    code: codes::EPUB_ERROR,
-    message: Some(format!("reading the epub file failed:{}",e)),
-})?;
+pub fn get_epub_spine(fp: &str) -> Result<Vec<crate::models::SpineItemResponse>, ApplicationError> {
+    let doc = EpubDoc::new(fp).map_err(|e| ApplicationError {
+        code: codes::EPUB_ERROR,
+        message: Some(format!("reading the epub file failed:{}", e)),
+    })?;
 
-    Ok(doc.spine)
-    // TODO: I am returning SpineItem which is the struct from the crate
-    // so we need to get whatall we need from spineItem into out very own struct and use that
+    Ok(doc.spine.into_iter().map(|item| models::SpineItemResponse{
+        idref: item.idref,
+        id: item.id,
+        properties: item.properties,
+        linear: item.linear,
+    }).collect())
 }
 
 

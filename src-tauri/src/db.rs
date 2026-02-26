@@ -102,6 +102,51 @@ pub async fn update_vb_record(pool: &SqlitePool, data_model: models::update_vr) 
     Ok(())
     }
 
+pub async fn get_vb_record_by_id(pool: &SqlitePool, id: String) -> Result<models::vagaread, ApplicationError> {
+    use sqlx::Row;
+
+    let row = sqlx::query(crate::queries::GET_VB_RECORD_BY_ID)
+        .bind(id)
+        .fetch_one(pool)
+        .await
+        .map_err(|e| ApplicationError {
+            code: codes::DATABASE_ERROR,
+            message: Some(format!("failed to get record: {e}")),
+        })?;
+
+    let vagaread_id = uuid::Uuid::parse_str(row.get::<&str, _>("id"))
+        .map_err(|e| ApplicationError {
+            code: codes::DATABASE_ERROR,
+            message: Some(format!("invalid uuid in db: {e}")),
+        })?;
+    let current_read_idx = row.get::<&str, _>("current_read_idx")
+        .parse::<usize>()
+        .map_err(|e| ApplicationError {
+            code: codes::DATABASE_ERROR,
+            message: Some(format!("invalid current_read_idx in db: {e}")),
+        })?;
+    let current_spine = row.get::<&str, _>("current_spine")
+        .parse::<usize>()
+        .map_err(|e| ApplicationError {
+            code: codes::DATABASE_ERROR,
+            message: Some(format!("invalid current_spine in db: {e}")),
+        })?;
+    let meta: serde_json::Value = serde_json::from_str(row.get::<&str, _>("meta_data"))
+        .map_err(|e| ApplicationError {
+            code: codes::DATABASE_ERROR,
+            message: Some(format!("invalid metadata json in db: {e}")),
+        })?;
+
+    Ok(models::vagaread {
+        vagaread_id,
+        internal_fp: row.get("internal_book_path"),
+        meta_data: meta,
+        current_read_idx,
+        current_spine,
+        is_deleted: row.get("is_deleted"),
+    })
+}
+
 pub async fn list_all_vb_records(pool: &SqlitePool) -> Result<Vec<models::vagaread>, ApplicationError> {
     use sqlx::Row;
 
