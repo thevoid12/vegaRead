@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { AppShell } from './components/layout/AppShell';
 import { LibraryPage } from './components/library/LibraryPage';
+import { ReadingView } from './components/reader/ReadingView';
 import { ImportModal } from './components/ui/ImportModal';
 import { ErrorToast } from './components/ui/ErrorToast';
 import { fetchAllBooks, uploadFile } from './api/tauri';
@@ -11,6 +12,7 @@ function App() {
   const [isLoading, setIsLoading]             = useState(true);
   const [showImportModal, setShowImportModal] = useState(false);
   const [toastError, setToastError]           = useState<string | null>(null);
+  const [activeBook, setActiveBook]           = useState<Book | null>(null);
 
   const refreshLibrary = useCallback(async () => {
     try {
@@ -29,27 +31,38 @@ function App() {
     refreshLibrary();
   }, [refreshLibrary]);
 
-  // Called by ImportModal with a validated .epub absolute path
   const handleImport = useCallback(async (filePath: string) => {
     await uploadFile(filePath);
     await refreshLibrary();
     setShowImportModal(false);
   }, [refreshLibrary]);
 
-  const handleBookClick = useCallback((book: Book) => {
-    // TODO: navigate to reading view
-    console.log('Open book:', book.vagaread_id);
-  }, []);
-
   const openImportModal = useCallback(() => setShowImportModal(true), []);
 
+  // ── Routing ─────────────────────────────────────────────────────
+  // Reading view: full-page, replaces the app shell entirely
+  if (activeBook) {
+    return (
+      <>
+        <ReadingView
+          book={activeBook}
+          onBack={() => setActiveBook(null)}
+        />
+        {toastError && (
+          <ErrorToast message={toastError} onDismiss={() => setToastError(null)} />
+        )}
+      </>
+    );
+  }
+
+  // Library view
   return (
     <>
       <AppShell onOpenImport={openImportModal}>
         <LibraryPage
           books={books}
           isLoading={isLoading}
-          onBookClick={handleBookClick}
+          onBookClick={setActiveBook}
           onOpenImport={openImportModal}
         />
       </AppShell>
@@ -62,10 +75,7 @@ function App() {
       />
 
       {toastError && (
-        <ErrorToast
-          message={toastError}
-          onDismiss={() => setToastError(null)}
-        />
+        <ErrorToast message={toastError} onDismiss={() => setToastError(null)} />
       )}
     </>
   );
