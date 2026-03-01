@@ -10,6 +10,8 @@ interface BookContentProps {
   hasPrev: boolean;
   currentChapterIdx: number;
   totalChapters: number;
+  /** When defined, inline speed-reading is active and this word index should be highlighted. */
+  srWordIdx?: number;
 }
 
 /**
@@ -119,6 +121,7 @@ export function BookContent({
   hasPrev,
   currentChapterIdx,
   totalChapters,
+  srWordIdx,
 }: BookContentProps) {
   const iframeRef      = useRef<HTMLIFrameElement>(null);
   const containerRef   = useRef<HTMLDivElement>(null);
@@ -270,6 +273,45 @@ export function BookContent({
 
     setCurrentPage(page);
   }, []);
+
+  // ── Inline speed-reader word highlight ──────────────────────────────────────
+  // goToPage must be declared before this effect.
+  // Uses offsetLeft (unaffected by CSS transforms) for two-page column mode —
+  // the same technique used in refresh() for page measurement.
+  useEffect(() => {
+    const doc = iframeRef.current?.contentDocument;
+    if (!doc?.head) return;
+
+    let styleEl = doc.getElementById('sr-hl') as HTMLStyleElement | null;
+
+    if (srWordIdx === undefined) {
+      styleEl?.remove();
+      return;
+    }
+
+    if (!styleEl) {
+      styleEl = doc.createElement('style');
+      styleEl.id = 'sr-hl';
+      doc.head.appendChild(styleEl);
+    }
+    styleEl.textContent = `[data-sr="${srWordIdx}"] { background: #fbbf24 !important; border-radius: 2px; padding: 0 1px; color: #1c1c1c !important; }`;
+
+    const el = doc.querySelector(`[data-sr="${srWordIdx}"]`) as HTMLElement | null;
+    if (!el) return;
+
+    const containerWidth = containerRef.current?.clientWidth ?? 0;
+    const isTwoPage = containerWidth >= TWO_PAGE_MIN_WIDTH;
+
+    if (isTwoPage) {
+      const viewWidth = viewWidthRef.current || doc.documentElement.clientWidth;
+      if (viewWidth > 0) {
+        const targetPage = Math.floor(el.offsetLeft / viewWidth);
+        if (targetPage !== currentPage) goToPage(targetPage);
+      }
+    } else {
+      el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    }
+  }, [srWordIdx, currentPage, goToPage]);
 
   const handleNext = () => {
     // Ignore clicks while refresh() is still computing totalPages — otherwise

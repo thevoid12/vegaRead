@@ -1,3 +1,6 @@
+export type SrState = 'idle' | 'running' | 'paused';
+export type SrMode  = 'inline' | 'focus';
+
 interface ReadingTopbarProps {
   bookTitle: string;
   author: string;
@@ -5,11 +8,23 @@ interface ReadingTopbarProps {
   onBack: () => void;
   onIncreaseFontSize: () => void;
   onDecreaseFontSize: () => void;
+  // Speed reader
+  srState: SrState;
+  srWordIdx: number;
+  srWordCount: number;
+  onStartSR: (mode: SrMode) => void;
+  onPauseSR: () => void;
+  onResumeSR: () => void;
+  onStopSR: () => void;
 }
 
 /**
  * Topbar shown while reading a book.
- * Contains: back-to-library, title, zoom controls, and a stubbed Speed Read button.
+ *
+ * Right section:
+ *   idle    → font-size controls + [▶ Inline] [▶ Focus] start buttons
+ *   running → word counter · [⏸ Pause] [■ Stop]
+ *   paused  → word counter · [▶ Resume] [■ Stop]
  */
 export function ReadingTopbar({
   bookTitle,
@@ -18,9 +33,19 @@ export function ReadingTopbar({
   onBack,
   onIncreaseFontSize,
   onDecreaseFontSize,
+  srState,
+  srWordIdx,
+  srWordCount,
+  onStartSR,
+  onPauseSR,
+  onResumeSR,
+  onStopSR,
 }: ReadingTopbarProps) {
+  const srActive = srState !== 'idle';
+
   return (
     <header className="flex items-center gap-3 px-3 py-2 bg-app-surface border-b border-app-border shrink-0">
+
       {/* ── Back button ───────────────────────────────────── */}
       <button
         type="button"
@@ -40,7 +65,7 @@ export function ReadingTopbar({
         Library
       </button>
 
-      {/* ── Title (center, fills available space) ─────────── */}
+      {/* ── Title (centre, fills available space) ─────────── */}
       <div className="flex flex-col min-w-0 flex-1 text-center">
         <span className="text-fg-primary text-sm font-semibold leading-tight truncate">
           {bookTitle}
@@ -52,55 +77,136 @@ export function ReadingTopbar({
 
       {/* ── Right controls ────────────────────────────────── */}
       <div className="shrink-0 flex items-center gap-1">
-        {/* Font size controls */}
-        <div className="flex items-center gap-0.5 bg-app-bg rounded-md border border-app-border px-1 py-0.5">
-          <button
-            type="button"
-            onClick={onDecreaseFontSize}
-            className="w-6 h-6 flex items-center justify-center text-fg-secondary hover:text-fg-primary rounded transition-colors"
-            aria-label="Decrease font size"
-            title="Decrease font size"
-          >
-            <span className="text-[11px] font-bold leading-none select-none">A</span>
-            <span className="text-[7px] leading-none select-none mb-0.5">−</span>
-          </button>
 
-          <span className="text-fg-muted text-[10px] w-7 text-center select-none tabular-nums">
-            {fontSize}px
-          </span>
+        {srActive ? (
+          /* ── Speed-reader active controls ── */
+          <>
+            {/* Word counter */}
+            <span className="text-fg-muted text-[11px] tabular-nums select-none px-1">
+              {srWordIdx + 1}&thinsp;/&thinsp;{srWordCount}
+              &ensp;&middot;&ensp;250&thinsp;wpm
+            </span>
 
-          <button
-            type="button"
-            onClick={onIncreaseFontSize}
-            className="w-6 h-6 flex items-center justify-center text-fg-secondary hover:text-fg-primary rounded transition-colors"
-            aria-label="Increase font size"
-            title="Increase font size"
-          >
-            <span className="text-[13px] font-bold leading-none select-none">A</span>
-            <span className="text-[7px] leading-none select-none mb-0.5">+</span>
-          </button>
-        </div>
+            {/* Pause / Resume */}
+            <button
+              type="button"
+              onClick={srState === 'running' ? onPauseSR : onResumeSR}
+              className="
+                inline-flex items-center gap-1
+                text-fg-secondary hover:text-fg-primary
+                rounded-md px-2.5 py-1.5
+                text-xs font-medium transition-colors hover:bg-app-hover
+              "
+              aria-label={srState === 'running' ? 'Pause speed reading' : 'Resume speed reading'}
+            >
+              {srState === 'running' ? (
+                <>
+                  <svg className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                    <rect x="6" y="4" width="4" height="16" rx="1" />
+                    <rect x="14" y="4" width="4" height="16" rx="1" />
+                  </svg>
+                  Pause
+                </>
+              ) : (
+                <>
+                  <svg className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                    <polygon points="5,3 19,12 5,21" />
+                  </svg>
+                  Resume
+                </>
+              )}
+            </button>
 
-        {/* Speed Read — placeholder, not yet implemented */}
-        <button
-          type="button"
-          disabled
-          title="Speed reader — coming soon"
-          className="
-            inline-flex items-center gap-1.5
-            bg-app-hover text-fg-muted
-            border border-app-border
-            rounded-md px-3 py-1.5 ml-1
-            text-xs font-medium
-            cursor-not-allowed opacity-60
-            select-none
-          "
-        >
-          <svg className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-            <polygon points="5,3 19,12 5,21" />
-          </svg>
-          Start
-        </button>
+            {/* Stop */}
+            <button
+              type="button"
+              onClick={onStopSR}
+              className="
+                inline-flex items-center gap-1
+                text-fg-secondary hover:text-fg-primary
+                rounded-md px-2.5 py-1.5
+                text-xs font-medium transition-colors hover:bg-app-hover
+              "
+              aria-label="Stop speed reading"
+            >
+              <svg className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                <rect x="4" y="4" width="16" height="16" rx="1" />
+              </svg>
+              Stop
+            </button>
+          </>
+        ) : (
+          /* ── Idle: font controls + start buttons ── */
+          <>
+            {/* Font size controls */}
+            <div className="flex items-center gap-0.5 bg-app-bg rounded-md border border-app-border px-1 py-0.5">
+              <button
+                type="button"
+                onClick={onDecreaseFontSize}
+                className="w-6 h-6 flex items-center justify-center text-fg-secondary hover:text-fg-primary rounded transition-colors"
+                aria-label="Decrease font size"
+                title="Decrease font size"
+              >
+                <span className="text-[11px] font-bold leading-none select-none">A</span>
+                <span className="text-[7px] leading-none select-none mb-0.5">−</span>
+              </button>
+
+              <span className="text-fg-muted text-[10px] w-7 text-center select-none tabular-nums">
+                {fontSize}px
+              </span>
+
+              <button
+                type="button"
+                onClick={onIncreaseFontSize}
+                className="w-6 h-6 flex items-center justify-center text-fg-secondary hover:text-fg-primary rounded transition-colors"
+                aria-label="Increase font size"
+                title="Increase font size"
+              >
+                <span className="text-[13px] font-bold leading-none select-none">A</span>
+                <span className="text-[7px] leading-none select-none mb-0.5">+</span>
+              </button>
+            </div>
+
+            {/* Inline speed-read */}
+            <button
+              type="button"
+              onClick={() => onStartSR('inline')}
+              className="
+                inline-flex items-center gap-1.5
+                bg-app-hover text-fg-secondary hover:text-fg-primary
+                border border-app-border
+                rounded-md px-2.5 py-1.5 ml-1
+                text-xs font-medium transition-colors hover:bg-app-border
+                select-none
+              "
+              title="Inline speed read — highlight word-by-word in the book"
+            >
+              <svg className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                <polygon points="5,3 19,12 5,21" />
+              </svg>
+              Inline
+            </button>
+
+            {/* Focus (RSVP) speed-read */}
+            <button
+              type="button"
+              onClick={() => onStartSR('focus')}
+              className="
+                inline-flex items-center gap-1.5
+                bg-accent text-white
+                rounded-md px-2.5 py-1.5
+                text-xs font-medium transition-colors hover:bg-accent/90
+                select-none
+              "
+              title="Focus speed read — one word at a time in an overlay"
+            >
+              <svg className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                <polygon points="5,3 19,12 5,21" />
+              </svg>
+              Focus
+            </button>
+          </>
+        )}
       </div>
     </header>
   );
