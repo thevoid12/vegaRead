@@ -1,5 +1,7 @@
+import { useState, useEffect } from 'react';
 import type { Book } from '../../types';
 import { BookCover } from '../common/BookCover';
+import { getCoverImage } from '../../api/tauri';
 
 interface BookCardProps {
   book: Book;
@@ -14,6 +16,13 @@ export function BookCard({ book, onClick }: BookCardProps) {
   const title  = book.meta_data.title?.[0]   ?? 'Untitled';
   const author = book.meta_data.creator?.[0];
   const hasProgress = book.current_read_idx > 0 || book.current_spine > 0;
+
+  const [coverSrc, setCoverSrc] = useState<string | undefined>();
+  useEffect(() => {
+    getCoverImage(book.vagaread_id).then(src => {
+      if (src) setCoverSrc(src);
+    }).catch(() => {});
+  }, [book.vagaread_id]);
 
   return (
     <button
@@ -33,7 +42,7 @@ export function BookCard({ book, onClick }: BookCardProps) {
     >
       {/* Cover — 2:3 aspect ratio */}
       <div className="aspect-[2/3] w-full overflow-hidden">
-        <BookCover title={title} author={author} />
+        <BookCover title={title} author={author} coverSrc={coverSrc} />
       </div>
 
       {/* Metadata footer */}

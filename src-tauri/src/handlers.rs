@@ -57,6 +57,13 @@ pub async fn list_spine_handler(file_id: uuid::Uuid, pool: State<'_, SqlitePool>
         epub_util::get_epub_spine(&record.internal_fp)
 }
 
+/// Returns the cover image as a data URI ("data:image/jpeg;base64,..."), or null if none.
+#[tauri::command]
+pub async fn get_cover_image_handler(file_id: uuid::Uuid, pool: State<'_, SqlitePool>) -> Result<Option<String>, ApplicationError> {
+    let record = db::get_vb_record_by_id(pool.inner(), file_id.to_string()).await?;
+    epub_util::extract_cover_as_data_uri(&record.internal_fp)
+}
+
 // core logic shared by both handlers — takes &SqlitePool directly, no State wrapper
 async fn list_all_books(pool: &SqlitePool) -> Result<Vec<models::vagaread>, ApplicationError> {
  

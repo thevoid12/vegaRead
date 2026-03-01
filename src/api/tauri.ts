@@ -44,3 +44,12 @@ export async function getBookContent(
 export async function listSpine(fileId: string): Promise<SpineItem[]> {
   return invoke<SpineItem[]>('list_spine_handler', { fileId });
 }
+
+/**
+ * Returns the cover image as a data URI (e.g. "data:image/jpeg;base64,..."),
+ * or null if the EPUB has no declared cover image.
+ * Maps to `get_cover_image_handler`.
+ */
+export async function getCoverImage(fileId: string): Promise<string | null> {
+  return invoke<string | null>('get_cover_image_handler', { fileId });
+}

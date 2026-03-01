@@ -3,6 +3,8 @@
 use crate::{errors::{ApplicationError, codes}, models};
 use epub::doc::EpubDoc;
 use std::collections::HashMap;
+use std::path::{Component, Path, PathBuf};
+use base64::{Engine as _, engine::general_purpose::STANDARD};
 
 pub fn extract_epub_metadata(fp: &str) ->Result<String,ApplicationError>{
 let doc = EpubDoc::new(fp).map_err(|e| ApplicationError {
@@ -17,6 +19,35 @@ for item in &doc.metadata {
 
 let metadata_json = serde_json::to_string_pretty(&metadata_map).unwrap();
 Ok(metadata_json)
+}
+
+/// Extracts the cover image of an EPUB as a data URI ("data:image/jpeg;base64,...").
+/// Returns None if the EPUB declares no cover image.
+pub fn extract_cover_as_data_uri(fp: &str) -> Result<Option<String>, ApplicationError> {
+    let mut doc = EpubDoc::new(fp).map_err(|e| ApplicationError {
+        code: codes::EPUB_ERROR,
+        message: Some(format!("reading the epub file failed: {}", e)),
+    })?;
+
+    // Try the epub crate's official cover lookup first.
+    let cover_id = doc.get_cover_id()
+        // Fallback: find any image resource whose manifest id or path contains "cover"
+        .or_else(|| {
+            doc.resources.iter()
+                .find(|(id, res)| {
+                    res.mime.starts_with("image/") && (
+                        id.to_lowercase().contains("cover") ||
+                        res.path.to_string_lossy().to_lowercase().contains("cover")
+                    )
+                })
+                .map(|(id, _)| id.clone())
+        });
+
+    let Some(id) = cover_id else { return Ok(None) };
+    let Some((bytes, mime)) = doc.get_resource(&id) else { return Ok(None) };
+
+    let encoded = STANDARD.encode(&bytes);
+    Ok(Some(format!("data:{};base64,{}", mime, encoded)))
 }
 
 // spine gives us the ordering for the epub files
@@ -100,6 +131,11 @@ pub fn get_paginated_content(fp: &str, mut spine_idx: usize, mut char_offset: us
         }),
     };
 
+    // Get the spine item's archive path so we can resolve relative image hrefs.
+    let spine_path = doc.resources.get(&id)
+        .map(|r| r.path.to_string_lossy().into_owned())
+        .unwrap_or_default();
+
     let content_str = match doc.get_resource_str(&id) {
         Some((c, _)) => c,
         None => return Ok(models::Content_response {
@@ -131,11 +167,119 @@ pub fn get_paginated_content(fp: &str, mut spine_idx: usize, mut char_offset: us
         char_offset += chunk_size;
     }
 
-   
+    // Replace relative <img src="..."> paths with inline data URIs so they
+    // render correctly inside an iframe srcDoc that has no base URL.
+    let content_with_images = inline_images_in_html(&string_chunk, &spine_path, &mut doc);
+
+
     Ok(models::Content_response {
-        content: string_chunk,
+        content: content_with_images,
         spine_idx,
         next_char_offset: char_offset,
         page_size: models::Content_response::PAGE_SIZE,
     })
+}
+
+/// Walks an HTML string and replaces every `<img src="relative-path">` with
+/// an inline `data:mime;base64,...` URI so the image renders in a srcDoc iframe.
+fn inline_images_in_html(
+    html: &str,
+    spine_path: &str,
+    doc: &mut EpubDoc<impl std::io::Read + std::io::Seek>,
+) -> String {
+    // Build an owned path → manifest-id map (no live borrow of doc after this).
+    let path_to_id: HashMap<PathBuf, String> = doc
+        .resources
+        .iter()
+        .map(|(id, res)| {
+            let p = res.path.to_string_lossy();
+            let p = p.trim_start_matches('/');
+            (PathBuf::from(p), id.clone())
+        })
+        .collect();
+
+    let spine_dir = Path::new(spine_path)
+        .parent()
+        .unwrap_or(Path::new(""));
+
+    let mut out = String::with_capacity(html.len());
+    let mut rest = html;
+
+    while let Some(img_start) = rest.find("<img") {
+        // Verify this is really an <img ...> tag (next char must be whitespace, /, or >)
+        let next_ch = rest[img_start + 4..].chars().next();
+        if !matches!(next_ch, Some(' ') | Some('\t') | Some('\n') | Some('\r') | Some('/') | Some('>')) {
+            out.push_str(&rest[..img_start + 4]);
+            rest = &rest[img_start + 4..];
+            continue;
+        }
+
+        out.push_str(&rest[..img_start]);
+        rest = &rest[img_start..];
+
+        let tag_end = rest.find('>').map(|p| p + 1).unwrap_or(rest.len());
+        let tag = &rest[..tag_end];
+        let rewritten = rewrite_src_attr(tag, spine_dir, &path_to_id, doc);
+        out.push_str(&rewritten);
+        rest = &rest[tag_end..];
+    }
+
+    out.push_str(rest);
+    out
+}
+
+/// Returns a copy of `tag` with its `src="..."` replaced by a data URI.
+/// Returns the tag unchanged if the src cannot be resolved.
+fn rewrite_src_attr(
+    tag: &str,
+    spine_dir: &Path,
+    path_to_id: &HashMap<PathBuf, String>,
+    doc: &mut EpubDoc<impl std::io::Read + std::io::Seek>,
+) -> String {
+    let Some(src_pos) = tag.find("src=") else { return tag.to_string() };
+
+    let after_eq = &tag[src_pos + 4..];
+    let (quote, val_start): (char, usize) = match after_eq.chars().next() {
+        Some('"')  => ('"',  1),
+        Some('\'') => ('\'', 1),
+        _          => return tag.to_string(),
+    };
+
+    let val_str = &after_eq[val_start..];
+    let val_end = val_str.find(quote).unwrap_or(val_str.len());
+    let src_value = &val_str[..val_end];
+
+    // Leave data URIs and absolute URLs as-is.
+    if src_value.starts_with("data:") || src_value.starts_with("http") || src_value.is_empty() {
+        return tag.to_string();
+    }
+
+    let resolved = resolve_epub_path(spine_dir, Path::new(src_value));
+    let Some(id) = path_to_id.get(&resolved) else { return tag.to_string() };
+    let Some((bytes, mime)) = doc.get_resource(id) else { return tag.to_string() };
+
+    let encoded = STANDARD.encode(&bytes);
+    let data_uri = format!("data:{};base64,{}", mime, encoded);
+
+    // Reconstruct the tag: everything up to and including the opening quote,
+    // then the new data URI, then the closing quote onward (the original value
+    // is replaced but the surrounding quotes are preserved).
+    let before = &tag[..src_pos + 4 + val_start]; // up to and including opening quote
+    let after  = &tag[src_pos + 4 + val_start + val_end..]; // from closing quote onward
+    format!("{}{}{}", before, data_uri, after)
+}
+
+/// Joins `base_dir` with `relative` and collapses any `..` / `.` components,
+/// producing the normalised EPUB-archive-relative path of the resource.
+fn resolve_epub_path(base_dir: &Path, relative: &Path) -> PathBuf {
+    let joined = base_dir.join(relative);
+    let mut out = PathBuf::new();
+    for component in joined.components() {
+        match component {
+            Component::ParentDir => { out.pop(); }
+            Component::CurDir    => {}
+            c                    => out.push(c),
+        }
+    }
+    out
 }
