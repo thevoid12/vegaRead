@@ -12,6 +12,8 @@ interface BookContentProps {
   totalChapters: number;
   /** When defined, inline speed-reading is active and this word index should be highlighted. */
   srWordIdx?: number;
+  /** Background colour for the highlighted word (default: amber #fbbf24). */
+  srHighlightColor?: string;
 }
 
 /**
@@ -122,6 +124,7 @@ export function BookContent({
   currentChapterIdx,
   totalChapters,
   srWordIdx,
+  srHighlightColor = '#fbbf24',
 }: BookContentProps) {
   const iframeRef      = useRef<HTMLIFrameElement>(null);
   const containerRef   = useRef<HTMLDivElement>(null);
@@ -294,7 +297,7 @@ export function BookContent({
       styleEl.id = 'sr-hl';
       doc.head.appendChild(styleEl);
     }
-    styleEl.textContent = `[data-sr="${srWordIdx}"] { background: #fbbf24 !important; border-radius: 2px; padding: 0 1px; color: #1c1c1c !important; }`;
+    styleEl.textContent = `[data-sr="${srWordIdx}"] { background: ${srHighlightColor} !important; border-radius: 2px; padding: 0 1px; color: #1c1c1c !important; }`;
 
     const el = doc.querySelector(`[data-sr="${srWordIdx}"]`) as HTMLElement | null;
     if (!el) return;

@@ -12,10 +12,12 @@ interface ReadingTopbarProps {
   srState: SrState;
   srWordIdx: number;
   srWordCount: number;
+  srWpm: number;
   onStartSR: (mode: SrMode) => void;
   onPauseSR: () => void;
   onResumeSR: () => void;
   onStopSR: () => void;
+  onOpenSettings: () => void;
 }
 
 /**
@@ -36,10 +38,12 @@ export function ReadingTopbar({
   srState,
   srWordIdx,
   srWordCount,
+  srWpm,
   onStartSR,
   onPauseSR,
   onResumeSR,
   onStopSR,
+  onOpenSettings,
 }: ReadingTopbarProps) {
   const srActive = srState !== 'idle';
 
@@ -84,7 +88,7 @@ export function ReadingTopbar({
             {/* Word counter */}
             <span className="text-fg-muted text-[11px] tabular-nums select-none px-1">
               {srWordIdx + 1}&thinsp;/&thinsp;{srWordCount}
-              &ensp;&middot;&ensp;250&thinsp;wpm
+              &ensp;&middot;&ensp;{srWpm}&thinsp;wpm
             </span>
 
             {/* Pause / Resume */}
@@ -133,6 +137,24 @@ export function ReadingTopbar({
                 <rect x="4" y="4" width="16" height="16" rx="1" />
               </svg>
               Stop
+            </button>
+
+            {/* Settings */}
+            <button
+              type="button"
+              onClick={onOpenSettings}
+              className="
+                w-7 h-7 flex items-center justify-center
+                text-fg-secondary hover:text-fg-primary
+                rounded-md transition-colors hover:bg-app-hover ml-0.5
+              "
+              aria-label="Open reading settings"
+              title="Settings"
+            >
+              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <circle cx="12" cy="12" r="3" />
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+              </svg>
             </button>
           </>
         ) : (
@@ -204,6 +226,24 @@ export function ReadingTopbar({
                 <polygon points="5,3 19,12 5,21" />
               </svg>
               Focus
+            </button>
+
+            {/* Settings */}
+            <button
+              type="button"
+              onClick={onOpenSettings}
+              className="
+                w-7 h-7 flex items-center justify-center
+                text-fg-secondary hover:text-fg-primary
+                rounded-md transition-colors hover:bg-app-hover ml-0.5
+              "
+              aria-label="Open reading settings"
+              title="Settings"
+            >
+              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <circle cx="12" cy="12" r="3" />
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+              </svg>
             </button>
           </>
         )}
