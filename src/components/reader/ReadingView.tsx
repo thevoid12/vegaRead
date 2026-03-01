@@ -10,6 +10,7 @@ const FONT_SIZE_MAX     = 32;
 const FONT_SIZE_STEP    = 2;
 const FONT_SIZE_DEFAULT = 18;
 
+
 interface ReadingViewProps {
   book: Book;
   onBack: () => void;
@@ -36,6 +37,10 @@ export function ReadingView({ book, onBack }: ReadingViewProps) {
   const [htmlContent,      setHtmlContent]      = useState('');
   const [isLoadingContent, setIsLoadingContent] = useState(false);
   const [fontSize,         setFontSize]         = useState(FONT_SIZE_DEFAULT);
+  // Next page position and chunk size returned by the backend
+  const [nextSpineIdx,     setNextSpineIdx]     = useState(book.current_spine);
+  const [nextCharOffset,   setNextCharOffset]   = useState(0);
+  const [pageSize,         setPageSize]         = useState(0);
 
   // ── Load spine list once on mount ────────────────────────────────────────
   useEffect(() => {
@@ -52,7 +57,12 @@ export function ReadingView({ book, onBack }: ReadingViewProps) {
   useEffect(() => {
     setIsLoadingContent(true);
     getBookContent(book.vagaread_id, currentSpineIdx, charOffset)
-      .then((res) => setHtmlContent(res.content.content))
+      .then((res) => {
+        setHtmlContent(res.content.content);
+        setNextSpineIdx(res.content.spine_idx);
+        setNextCharOffset(res.content.next_char_offset);
+        setPageSize(res.content.page_size);
+      })
       .catch(console.error)
       .finally(() => setIsLoadingContent(false));
   }, [book.vagaread_id, currentSpineIdx, charOffset]);
@@ -64,21 +74,26 @@ export function ReadingView({ book, onBack }: ReadingViewProps) {
     setCharOffset(0);
   }, []);
 
-  /** Advance to the next chapter (called by BookContent when last page is passed) */
+  /**
+   * Advance to the position returned by the last backend response.
+   * If the chunk exhausted the chapter, the backend already set nextSpineIdx to
+   * currentSpineIdx + 1 and nextCharOffset to 0, so this naturally crosses
+   * chapter boundaries without any extra logic here.
+   */
   const handleNext = useCallback(() => {
-    if (currentSpineIdx < spineItems.length - 1) {
-      setCurrentSpineIdx((i) => i + 1);
-      setCharOffset(0);
-    }
-  }, [currentSpineIdx, spineItems.length]);
+    setCurrentSpineIdx(nextSpineIdx);
+    setCharOffset(nextCharOffset);
+  }, [nextSpineIdx, nextCharOffset]);
 
-  /** Go back to the previous chapter */
+  /** Go back one chunk within the chapter, or to the previous chapter. */
   const handlePrev = useCallback(() => {
-    if (currentSpineIdx > 0) {
+    if (charOffset > 0 && pageSize > 0) {
+      setCharOffset((o) => Math.max(0, o - pageSize));
+    } else if (currentSpineIdx > 0) {
       setCurrentSpineIdx((i) => i - 1);
       setCharOffset(0);
     }
-  }, [currentSpineIdx]);
+  }, [charOffset, currentSpineIdx, pageSize]);
 
   // ── Font size controls ────────────────────────────────────────────────────
   const increaseFontSize = useCallback(
@@ -92,6 +107,12 @@ export function ReadingView({ book, onBack }: ReadingViewProps) {
 
   const title  = book.meta_data.title?.[0]   ?? 'Untitled';
   const author = book.meta_data.creator?.[0] ?? '';
+
+  // Backend sets nextSpineIdx = currentSpineIdx + 1 when a chunk exhausts the
+  // chapter, so nextSpineIdx >= spineItems.length means we are on the last chunk
+  // of the last chapter.
+  const hasNext = nextSpineIdx < spineItems.length;
+  const hasPrev = charOffset > 0 || currentSpineIdx > 0;
 
   return (
     <div className="flex flex-col h-full bg-[#fefcf9] text-fg-primary font-sans antialiased">
@@ -118,8 +139,8 @@ export function ReadingView({ book, onBack }: ReadingViewProps) {
           isLoading={isLoadingContent}
           onNext={handleNext}
           onPrev={handlePrev}
-          hasNext={currentSpineIdx < spineItems.length - 1}
-          hasPrev={currentSpineIdx > 0}
+          hasNext={hasNext}
+          hasPrev={hasPrev}
           currentChapterIdx={currentSpineIdx}
           totalChapters={spineItems.length}
         />

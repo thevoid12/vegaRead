@@ -52,6 +52,7 @@ export interface ContentResponse {
   content: string;
   spine_idx: number;
   next_char_offset: number;
+  page_size: number;  // chunk size used by the backend — used by the frontend to step back on Prev
 }
 
 /**

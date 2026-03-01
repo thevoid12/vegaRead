@@ -1,6 +1,6 @@
 use uuid;
 // 
-pub const PAGINATE_CHAR: usize=1_000_000;
+pub const PAGINATE_CHAR: usize = 10_000;
 
 // each book will have 1 vagaread recor
 #[derive(serde::Serialize)]
@@ -24,6 +24,11 @@ pub struct Content_response {
     pub content: String,
     pub spine_idx: usize,
     pub next_char_offset: usize,  // pass this back on the next call to continue reading
+    pub page_size: usize,         // always Self::PAGE_SIZE — tells the frontend how far to step back on Prev
+}
+
+impl Content_response {
+    pub const PAGE_SIZE: usize = PAGINATE_CHAR;
 }
 
 #[derive(serde::Serialize)]

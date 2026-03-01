@@ -106,6 +106,7 @@ pub fn get_paginated_content(fp: &str, mut spine_idx: usize, mut char_offset: us
             content: String::new(),
             spine_idx,
             next_char_offset: 0,
+            page_size: models::Content_response::PAGE_SIZE,
         }),
     };
 
@@ -133,7 +134,8 @@ pub fn get_paginated_content(fp: &str, mut spine_idx: usize, mut char_offset: us
    
     Ok(models::Content_response {
         content: string_chunk,
-        spine_idx:spine_idx,
-        next_char_offset:char_offset,
+        spine_idx,
+        next_char_offset: char_offset,
+        page_size: models::Content_response::PAGE_SIZE,
     })
 }
