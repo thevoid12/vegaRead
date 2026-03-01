@@ -13,52 +13,33 @@ interface BookContentProps {
 }
 
 /**
- * CSS injected into the EPUB iframe for the two-page spread layout.
- *
- * Zero-drift invariant: column-gap must equal exactly 2 × horizontal padding.
- *   padding-left = padding-right = 2rem  →  column-gap = 4rem
- *
- * Why this matters:
- *   col_width  = (viewport_width - 2·pad_h - gap) / 2
- *   pair_advance = 2·(col_width + gap) = viewport_width - 2·pad_h + gap
- *   pair_advance = viewport_width  iff  gap = 2·pad_h
- *
- * When gap = 2·pad_h the column pairs advance by exactly one viewport width
- * per page, so translateX(-N·viewWidth) always reveals the correct pair
- * regardless of N. Without this, drift accumulates by (viewWidth - pair_advance)
- * per page, which becomes ~2rem (~32px) every page, visibly worsening with N.
- *
- * The invariant holds at any rem resolution (even if the EPUB overrides the
- * html font-size) because padding and gap are expressed in the same unit.
- *
- * body has NO overflow constraint — columns flow freely to the right so that
- * body.scrollWidth reflects the true total width of all column pairs.
- * html clips the visible area with overflow:hidden.
- * The smooth page turn is a CSS transition on body.transform.
+ * Container width (px) below which single-page vertical-scroll mode is used
+ * instead of the two-page CSS column spread.
  */
-function buildReadingStyles(fontSize: number): string {
-  return `
-    html {
-      height: 100%;
-      overflow: hidden;
-      background: #fefcf9;
-    }
-    body {
-      height: 100%;
-      column-count: 2;
-      column-gap: 4rem;
-      column-fill: auto;
-      box-sizing: border-box;
-      margin: 0;
-      padding: 2.5rem 2rem;
-      background: #fefcf9;
-      font-family: Georgia, 'Palatino Linotype', Palatino, serif;
-      font-size: ${fontSize}px;
-      line-height: 1.8;
-      color: #2a2a2a;
-      word-break: break-word;
-      transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    }
+const TWO_PAGE_MIN_WIDTH = 600;
+
+/**
+ * CSS injected into the EPUB iframe.
+ *
+ * Two modes:
+ *
+ * ── Two-page spread (container ≥ 600 px) ───────────────────────────────────
+ * Uses CSS multi-column (column-count: 2) on body. Columns flow to the right;
+ * html clips the visible area. body.style.transform reveals successive pairs.
+ *
+ * Zero-drift invariant: column-gap = 2 × horizontal-padding in the same unit.
+ *   pair_advance = 2·(col_width + gap) = content_width + gap
+ *                = (W − 4rem) + 4rem = W  for any W
+ * body must NOT be clipped — we force overflow: visible !important to override
+ * any EPUB stylesheet that sets overflow: hidden on body, which would make
+ * body.scrollWidth = body.clientWidth and give totalPages = 1.
+ *
+ * ── Single-page scroll (container < 600 px) ────────────────────────────────
+ * No CSS columns. body scrolls vertically inside the iframe (overflow-y: auto).
+ * totalPages is always 1; navigation is chapter-level only.
+ */
+function buildReadingStyles(fontSize: number, isTwoPage: boolean): string {
+  const common = `
     img { max-width: 100%; height: auto; display: block; margin: 1em auto; break-inside: avoid; }
     p   { margin: 0 0 1.1em; text-align: justify; hyphens: auto; }
     h1  { font-size: 1.65em; margin: 2em 0 0.6em; break-after: avoid; }
@@ -79,6 +60,53 @@ function buildReadingStyles(fontSize: number): string {
     th, td { border: 1px solid #deddda; padding: 0.5em 0.75em; }
     th { background: #f5f4f1; font-weight: 600; }
   `;
+
+  if (isTwoPage) {
+    return `
+      html { height: 100%; overflow: hidden; background: #fefcf9; }
+      body {
+        height: 100% !important;
+        overflow: visible !important;
+        column-count: 2;
+        column-gap: 4rem;
+        column-fill: auto;
+        box-sizing: border-box;
+        margin: 0 !important;
+        padding: 2.5rem 2rem;
+        background: #fefcf9;
+        font-family: Georgia, 'Palatino Linotype', Palatino, serif;
+        font-size: ${fontSize}px;
+        line-height: 1.8;
+        color: #2a2a2a;
+        word-break: break-word;
+      }
+      ${common}
+    `;
+  }
+
+  // Single-page scroll mode — no columns, body scrolls vertically.
+  // height: 100% !important is required: the body must be a fixed-height scroll
+  // container equal to the iframe viewport. With height: auto the body grows to
+  // fit all content (scrollHeight = clientHeight) and overflow-y: auto has no
+  // effect — there is nothing to scroll.
+  return `
+    html { height: 100%; overflow: hidden; background: #fefcf9; }
+    body {
+      height: 100% !important;
+      overflow-y: auto !important;
+      overflow-x: hidden !important;
+      box-sizing: border-box;
+      margin: 0 !important;
+      padding: 1.5rem 1.25rem;
+      background: #fefcf9;
+      font-family: Georgia, 'Palatino Linotype', Palatino, serif;
+      font-size: ${fontSize}px;
+      line-height: 1.8;
+      color: #2a2a2a;
+      word-break: break-word;
+    }
+    ${common}
+  `;
 }
 
 export function BookContent({
@@ -92,25 +120,44 @@ export function BookContent({
   currentChapterIdx,
   totalChapters,
 }: BookContentProps) {
-  const iframeRef    = useRef<HTMLIFrameElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
+  const iframeRef      = useRef<HTMLIFrameElement>(null);
+  const containerRef   = useRef<HTMLDivElement>(null);
+  // Width snapshot from the last refresh — used in goToPage to avoid drift
+  // from minor iframe reflows between refresh and navigation.
+  const viewWidthRef   = useRef<number>(0);
+  // RAF id for the pending fade-in so rapid navigation can cancel it.
+  const animFrameRef   = useRef<number>(0);
+  // True while refresh() is still computing totalPages inside its RAFs.
+  // Prevents a click during that window from firing chapter navigation before
+  // totalPages has been updated from the default 1.
+  const isMeasuringRef = useRef<boolean>(false);
 
   const [currentPage, setCurrentPage] = useState(0);
   const [totalPages,  setTotalPages]  = useState(1);
 
   /**
-   * Inject reading CSS and compute the total page count.
+   * Inject reading CSS and — for two-page mode — compute the total page count.
    *
-   * Page count  = ceil(body.scrollWidth / viewWidth)
-   * Page offset = N × viewWidth  (zero-drift guaranteed by gap = 2·pad_h)
+   * isTwoPage is derived from the container's current pixel width so the
+   * column-count in CSS and the page measurement are always consistent.
    *
-   * Two nested requestAnimationFrames: the first waits for the style injection
-   * to be applied; the second waits for the browser to complete the column
-   * layout reflow so body.scrollWidth is accurate.
+   * Single-page mode: totalPages is fixed at 1; no measurement needed.
+   *
+   * Two-page mode:
+   *   pages = ceil(body.scrollWidth / viewWidth)
+   *   body.scrollWidth reflects all off-screen columns because we force
+   *   overflow: visible !important — overriding any EPUB CSS that would
+   *   otherwise clip the scroll dimension and give a false pages = 1.
+   *
+   * Two nested RAFs wait for the style injection to take effect and for the
+   * column layout reflow to complete before measuring scrollWidth.
    */
   const refresh = useCallback(() => {
     const doc = iframeRef.current?.contentDocument;
     if (!doc?.head || !doc?.body) return;
+
+    const containerWidth = containerRef.current?.clientWidth ?? 0;
+    const isTwoPage = containerWidth >= TWO_PAGE_MIN_WIDTH;
 
     let styleEl = doc.getElementById('vr-reading-styles') as HTMLStyleElement | null;
     if (!styleEl) {
@@ -118,26 +165,56 @@ export function BookContent({
       styleEl.id = 'vr-reading-styles';
       doc.head.appendChild(styleEl);
     }
-    styleEl.textContent = buildReadingStyles(fontSize);
+    styleEl.textContent = buildReadingStyles(fontSize, isTwoPage);
+
+    if (!isTwoPage) {
+      // Vertical scroll mode: clear any leftover column transform and fix at 1 page
+      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+      doc.body.style.transition = 'none';
+      doc.body.style.transform  = 'none';
+      doc.body.style.opacity    = '1';
+      setTotalPages(1);
+      setCurrentPage(0);
+      return;
+    }
+
+    // Two-page column mode: measure after layout reflow.
+    // Mark as measuring so navigation clicks during this window are ignored.
+    isMeasuringRef.current = true;
+
+    // Reset body to position 0 before measuring so probe offsets are correct.
+    doc.body.style.transition = 'none';
+    doc.body.style.transform  = 'translateX(0px)';
+    doc.body.style.opacity    = '1';
 
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         const viewWidth = doc.documentElement.clientWidth;
-        if (!viewWidth) return;
+        if (!viewWidth) { isMeasuringRef.current = false; return; }
+        viewWidthRef.current = viewWidth;
 
-        // body.scrollWidth includes all off-screen column pairs because
-        // body has no overflow constraint
-        const pages = Math.max(1, Math.ceil(doc.body.scrollWidth / viewWidth));
+        // Probe element at end of body: its offsetLeft (relative to its offset
+        // parent) tells us which column it landed in. This is more reliable than
+        // body.scrollWidth which some WebKit builds report as clientWidth when
+        // overflow: visible is set on body.
+        //
+        // offsetLeft is unaffected by CSS transforms and overflow clipping, so
+        // it gives the true layout position regardless of the current transform.
+        //
+        // Probe formula: pages = floor(probe.offsetLeft / viewWidth) + 1
+        // because each page starts at exactly k * viewWidth (zero-drift invariant).
+        const probe = doc.createElement('div');
+        probe.style.cssText = 'height:0;width:0;break-inside:avoid;visibility:hidden;';
+        doc.body.appendChild(probe);
+        const probeLeft = probe.offsetLeft;
+        doc.body.removeChild(probe);
 
+        const pages = Math.max(1, Math.floor(probeLeft / viewWidth) + 1);
+
+        isMeasuringRef.current = false;
         setTotalPages(pages);
         setCurrentPage(0);
-
-        // Reset to page 0 without triggering the slide animation
-        doc.body.style.transition = 'none';
-        doc.body.style.transform  = 'translateX(0px)';
-        requestAnimationFrame(() => {
-          if (doc.body) doc.body.style.transition = '';
-        });
+        if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
       });
     });
   }, [fontSize]);
@@ -156,8 +233,7 @@ export function BookContent({
     setTotalPages(1);
   }, [html]);
 
-  // Recompute pages when the reading area is resized (window resize, sidebar
-  // toggle, etc.) so page boundaries stay accurate and responsive
+  // Recompute pages and column mode when the reading area is resized
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -168,21 +244,44 @@ export function BookContent({
     return () => ro.disconnect();
   }, [refresh]);
 
-  // Slide body to page N. Page advance = viewWidth (zero-drift invariant holds)
+  /**
+   * Navigate to page N with a crossfade so both columns switch as a unit.
+   * Instantly jumps to the new position (invisible) then fades in, so neither
+   * column slides past the viewport edge independently.
+   * cancelAnimationFrame prevents stale fade-ins from stacking on rapid taps.
+   */
   const goToPage = useCallback((page: number) => {
     const doc = iframeRef.current?.contentDocument;
-    if (!doc) return;
-    const viewWidth = doc.documentElement.clientWidth;
-    doc.body.style.transform = `translateX(-${page * viewWidth}px)`;
+    if (!doc?.body) return;
+    const viewWidth = viewWidthRef.current || doc.documentElement.clientWidth;
+    const body = doc.body;
+
+    if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+
+    body.style.transition = 'none';
+    body.style.opacity    = '0';
+    body.style.transform  = `translateX(-${page * viewWidth}px)`;
+
+    animFrameRef.current = requestAnimationFrame(() => {
+      body.style.transition = 'opacity 0.15s ease';
+      body.style.opacity    = '1';
+      animFrameRef.current  = 0;
+    });
+
     setCurrentPage(page);
   }, []);
 
   const handleNext = () => {
+    // Ignore clicks while refresh() is still computing totalPages — otherwise
+    // a fast click during the brief RAF window fires onNext() when totalPages
+    // is still at its reset value of 1 (0 < 0 is false → chapter advance).
+    if (isMeasuringRef.current || isLoading) return;
     if (currentPage < totalPages - 1) goToPage(currentPage + 1);
     else if (hasNext) onNext();
   };
 
   const handlePrev = () => {
+    if (isMeasuringRef.current || isLoading) return;
     if (currentPage > 0) goToPage(currentPage - 1);
     else if (hasPrev) onPrev();
   };

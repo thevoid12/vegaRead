@@ -136,42 +136,60 @@ Navigation handlers:
 
 ### BookContent
 
-Renders the EPUB HTML inside an isolated **iframe** using CSS column-based two-page spread pagination.
+Renders the EPUB HTML inside an isolated **iframe**. Automatically switches between two layout modes based on the container's pixel width.
 
-**Two-page layout mechanism:**
+**TWO_PAGE_MIN_WIDTH = 600 px** — threshold constant. Above: two-page spread. Below: single-page scroll.
 
-The layout uses CSS multi-column on the body element. The body has no overflow constraint so CSS column boxes extend freely to the right. The html element clips the visible area with overflow:hidden. Translating body.style.transform reveals successive column pairs.
+---
 
-Zero-drift invariant: column-gap must equal exactly 2 times the horizontal padding, both expressed in the same unit (rem). With padding-left = padding-right = 2rem and column-gap = 4rem:
+**Two-page spread mode (container ≥ 600 px)**
 
-    col_width    = (viewport_width - 2*2rem - 4rem) / 2
-    pair_advance = 2 * (col_width + 4rem) = viewport_width - 4rem + 4rem = viewport_width
+Uses CSS multi-column (column-count: 2) on the body element. Columns flow freely to the right; the html element clips the visible area with overflow:hidden. Successive column pairs are revealed by translating body.style.transform.
 
-The pair_advance equals the viewport width for any viewport width and any rem resolution. Without this invariant, drift accumulates as 2rem per page turn, causing columns to shift progressively off their expected positions.
+Zero-drift invariant: column-gap must equal exactly 2 times the horizontal padding in the same unit (rem). With padding-left = padding-right = 2rem and column-gap = 4rem:
 
-**CSS applied inside the iframe:**
+    pair_advance = 2 * (col_width + 4rem)
+                 = content_width + gap
+                 = (viewport_width - 4rem) + 4rem
+                 = viewport_width
+
+The pair_advance equals the viewport width for any viewport width and any rem resolution. The invariant also holds for column-count: 1 with the same padding and gap values.
+
+CSS applied inside the iframe:
 - **html**: height 100%, overflow hidden (clips the viewport)
-- **body**: height 100%, column-count 2, column-gap 4rem, padding 2.5rem 2rem, CSS transition on transform for the page-turn animation
+- **body**: height 100% !important, overflow visible !important, column-count 2, column-gap 4rem, padding 2.5rem 2rem
 
-**Page measurement:**
-- Total pages = Math.ceil(body.scrollWidth / html.clientWidth)
-- body.scrollWidth includes all off-screen column pairs because body has no overflow constraint
-- Two nested requestAnimationFrames ensure the browser has finished column layout reflow before measuring
+The overflow: visible !important is critical. EPUB stylesheets frequently set body overflow: hidden, which clips body.scrollWidth to equal body.clientWidth and gives totalPages = 1, breaking in-chapter pagination entirely.
 
-**Page navigation:**
-- goToPage(N) sets body.style.transform = translateX(-N * viewWidth)
-- When page 0 is reached and the user goes back, onPrev fires (previous chapter)
-- When the last page is reached and the user goes forward, onNext fires (next chapter)
+Page measurement:
+- Total pages = Math.ceil(body.scrollWidth / viewWidth)
+- viewWidth is captured in viewWidthRef at measurement time and reused in goToPage to avoid drift from minor reflows
+- Two nested requestAnimationFrames wait for style injection and column layout reflow to complete
 
-**Responsiveness:**
-A ResizeObserver on the container div calls refresh() whenever the reading area changes size (window resize). This recomputes totalPages and resets to page 0 with correct column layout for the new width.
+Page navigation uses a crossfade (opacity 0 → reposition → opacity 1) so both columns switch as a single unit rather than sliding past the viewport edge independently. cancelAnimationFrame prevents stale fade-ins from stacking on rapid navigation.
 
-**Page state reset:**
-When the html prop changes (new chapter), a useEffect immediately resets currentPage and totalPages. The iframe remounts via key={html} and handleIframeLoad recomputes the layout once the new content has loaded.
+---
 
-**Navigation button labels:**
+**Single-page scroll mode (container < 600 px)**
+
+No CSS columns. The body scrolls vertically within the iframe (overflow-y: auto). The user scrolls through chapter content with mouse wheel or touch. totalPages is always 1; navigation is chapter-level only (no in-chapter page buttons).
+
+CSS applied inside the iframe:
+- **html**: height 100%, overflow hidden
+- **body**: height auto !important, overflow-y auto !important, overflow-x hidden !important, padding 1.5rem 1.25rem
+
+---
+
+**Shared behaviour**
+
+A ResizeObserver on the container div calls refresh() whenever the reading area changes size. refresh() reads the container's current clientWidth to determine isTwoPage, injects the appropriate CSS, and recomputes totalPages. Switching between modes (resize crossing 600 px) resets to page 0 and clears any leftover body transform.
+
+When the html prop changes (new chapter or new chunk), a useEffect immediately resets currentPage and totalPages. The iframe remounts via key={html} and handleIframeLoad recomputes the layout once the new content has loaded.
+
+Navigation button labels:
 - Prev Page (when on page > 0) / Prev Chapter (when on page 0)
 - Next Page (when not on last page) / Next Chapter (when on last page)
+- The pg X/Y counter is hidden when totalPages = 1 (single-page scroll mode)
 
 ### SpineList
 
