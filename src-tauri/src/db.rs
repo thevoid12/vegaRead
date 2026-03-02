@@ -18,10 +18,6 @@ pub async fn init_db(app: &tauri::AppHandle) -> Result<SqlitePool, ApplicationEr
     })?;
 
     util::create_app_directory(app)?;
-    // std::fs::create_dir_all(&data_dir).map_err(|e| ApplicationError {
-    //     code: codes::DIRECTORY_ERROR,
-    //     message: Some(format!("unable to create app data dir: {e}")),
-    // })?;
 
     let db_path = data_dir.join("vagaread.db");
     let is_new_db = !db_path.exists();
@@ -76,6 +72,7 @@ pub async fn create_record(pool: &SqlitePool, data_model: models::vagaread) -> R
         .bind(data_model.meta_data.to_string())
         .bind(data_model.current_read_idx.to_string())
         .bind(data_model.current_spine.to_string())
+        .bind(data_model.current_page.to_string())
         .bind(data_model.is_deleted)
         .execute(pool)
         .await
@@ -91,6 +88,7 @@ pub async fn update_vb_record(pool: &SqlitePool, data_model: models::update_vr) 
     sqlx::query(crate::queries::UPDATE_VB_RECORD)
         .bind(data_model.current_read_idx.to_string())
         .bind(data_model.current_spine.to_string())
+        .bind(data_model.current_page.to_string())
         .bind(data_model.vagaread_id)
         .execute(pool)
         .await
@@ -100,7 +98,7 @@ pub async fn update_vb_record(pool: &SqlitePool, data_model: models::update_vr) 
         })?;
 
     Ok(())
-    }
+}
 
 pub async fn get_vb_record_by_id(pool: &SqlitePool, id: String) -> Result<models::vagaread, ApplicationError> {
     use sqlx::Row;
@@ -131,6 +129,9 @@ pub async fn get_vb_record_by_id(pool: &SqlitePool, id: String) -> Result<models
             code: codes::DATABASE_ERROR,
             message: Some(format!("invalid current_spine in db: {e}")),
         })?;
+    let current_page = row.get::<&str, _>("current_page")
+        .parse::<usize>()
+        .unwrap_or(0);
     let meta: serde_json::Value = serde_json::from_str(row.get::<&str, _>("meta_data"))
         .map_err(|e| ApplicationError {
             code: codes::DATABASE_ERROR,
@@ -143,6 +144,7 @@ pub async fn get_vb_record_by_id(pool: &SqlitePool, id: String) -> Result<models
         meta_data: meta,
         current_read_idx,
         current_spine,
+        current_page,
         is_deleted: row.get("is_deleted"),
     })
 }
@@ -178,6 +180,9 @@ pub async fn list_all_vb_records(pool: &SqlitePool) -> Result<Vec<models::vagare
                     code: codes::DATABASE_ERROR,
                     message: Some(format!("invalid current_spine in db: {e}")),
                 })?;
+            let current_page = row.get::<&str, _>("current_page")
+                .parse::<usize>()
+                .unwrap_or(0);
             let meta: serde_json::Value = serde_json::from_str(row.get::<&str, _>("meta_data"))
                 .map_err(|e| ApplicationError {
                     code: codes::DATABASE_ERROR,
@@ -189,6 +194,7 @@ pub async fn list_all_vb_records(pool: &SqlitePool) -> Result<Vec<models::vagare
                 meta_data: meta,
                 current_read_idx,
                 current_spine,
+                current_page,
                 is_deleted: row.get("is_deleted"),
             })
         })

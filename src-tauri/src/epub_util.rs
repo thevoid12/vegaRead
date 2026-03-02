@@ -143,6 +143,7 @@ pub fn get_paginated_content(fp: &str, mut spine_idx: usize, mut char_offset: us
             spine_idx,
             next_char_offset: 0,
             page_size: models::Content_response::PAGE_SIZE,
+            current_page: 0,
         }),
     };
 
@@ -177,6 +178,7 @@ pub fn get_paginated_content(fp: &str, mut spine_idx: usize, mut char_offset: us
         spine_idx,
         next_char_offset: char_offset,
         page_size: models::Content_response::PAGE_SIZE,
+        current_page: 0, // overridden by the handler when restoring a saved position
     })
 }
 

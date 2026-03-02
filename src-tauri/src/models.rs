@@ -10,6 +10,7 @@ pub struct vagaread{
     pub meta_data: serde_json::Value,
     pub current_read_idx: usize,
     pub current_spine: usize,
+    pub current_page: usize,
     pub is_deleted: bool,
 }
 
@@ -17,6 +18,7 @@ pub struct update_vr{
     pub vagaread_id: String, // primary key
     pub current_read_idx: usize,
     pub current_spine: usize,
+    pub current_page: usize,
 }
 
 #[derive(serde::Serialize)]
@@ -25,6 +27,7 @@ pub struct Content_response {
     pub spine_idx: usize,
     pub next_char_offset: usize,  // pass this back on the next call to continue reading
     pub page_size: usize,         // always Self::PAGE_SIZE — tells the frontend how far to step back on Prev
+    pub current_page: usize,      // visual page to restore to (0 when navigating, saved value when restoring)
 }
 
 impl Content_response {

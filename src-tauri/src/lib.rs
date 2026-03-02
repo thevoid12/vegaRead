@@ -29,6 +29,8 @@ pub fn run() {
             handler::get_ebook_content_handler,
             handler::list_spine_handler,
             handler::get_cover_image_handler,
+            handler::save_reading_progress_handler,
+            handler::save_sr_position_handler,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

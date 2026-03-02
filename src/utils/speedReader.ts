@@ -51,9 +51,26 @@ export function wrapWordsInSpans(html: string): { html: string; wordCount: numbe
 /**
  * Strips all HTML tags and returns the plain-text words in document order.
  * Used by Focus (RSVP) mode which only needs the word sequence, not the markup.
+ *
+ * Uses the same tree-walker + SKIP_TAGS logic as wrapWordsInSpans so that
+ * word indices produced by both functions are always consistent.
  */
 export function extractWords(html: string): string[] {
   const parser = new DOMParser();
   const doc = parser.parseFromString(html, 'text/html');
-  return (doc.body.textContent ?? '').split(/\s+/).filter(Boolean);
+  const words: string[] = [];
+  const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT, {
+    acceptNode: (node: Node) => {
+      const parent = (node as Text).parentElement;
+      if (parent && SKIP_TAGS.has(parent.tagName)) return NodeFilter.FILTER_REJECT;
+      return NodeFilter.FILTER_ACCEPT;
+    },
+  });
+  let node: Node | null;
+  while ((node = walker.nextNode())) {
+    for (const token of (node.textContent ?? '').split(/\s+/)) {
+      if (token) words.push(token);
+    }
+  }
+  return words;
 }

@@ -14,6 +14,24 @@ interface BookContentProps {
   srWordIdx?: number;
   /** Background colour for the highlighted word (default: amber #fbbf24). */
   srHighlightColor?: string;
+  /**
+   * Called when the user right-clicks a word inside the iframe.
+   * wordIdx is the zero-based word index matching wrapWordsInSpans / extractWords.
+   * x / y are viewport (fixed) coordinates for positioning the context menu.
+   */
+  onWordRightClick?: (wordIdx: number, x: number, y: number) => void;
+  /** Called on any left-click inside the iframe (used to close context menus). */
+  onIframeClick?: () => void;
+  /** Visual page to navigate to after the content loads (0 = start). */
+  initialPage?: number;
+  /** Called whenever the visible page changes (goToPage or after refresh). */
+  onPageChange?: (page: number) => void;
+  /**
+   * Called when the user makes (or clears) a text selection inside the iframe.
+   * wordIdx is the zero-based index of the first selected word, or null when
+   * the selection is collapsed / empty.
+   */
+  onSelectionChange?: (wordIdx: number | null) => void;
 }
 
 /**
@@ -113,6 +131,46 @@ function buildReadingStyles(fontSize: number, isTwoPage: boolean): string {
   `;
 }
 
+// Tags whose text content should not be counted as readable words —
+// must match the SKIP_TAGS set in speedReader.ts.
+const SR_SKIP_TAGS = new Set(['SCRIPT', 'STYLE', 'HEAD', 'META', 'LINK', 'TITLE', 'NOSCRIPT']);
+
+/**
+ * Returns the zero-based word index at (x, y) inside `doc`, matching the
+ * indices produced by wrapWordsInSpans / extractWords.
+ *
+ * Uses WebKit's caretRangeFromPoint to locate the character, then counts
+ * words across text nodes (skipping SR_SKIP_TAGS) up to that point.
+ * Returns null when the point is not over readable text.
+ */
+function getWordIndexAtPoint(doc: Document, x: number, y: number): number | null {
+  type DocWithCaret = Document & { caretRangeFromPoint?: (x: number, y: number) => Range | null };
+  const range = (doc as DocWithCaret).caretRangeFromPoint?.(x, y);
+  if (!range || range.startContainer.nodeType !== Node.TEXT_NODE) return null;
+
+  const clickedNode = range.startContainer;
+  let wordIdx = 0;
+
+  const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT, {
+    acceptNode: (node: Node) => {
+      const parent = (node as Text).parentElement;
+      if (parent && SR_SKIP_TAGS.has(parent.tagName)) return NodeFilter.FILTER_REJECT;
+      return NodeFilter.FILTER_ACCEPT;
+    },
+  });
+
+  // Sum word counts in all text nodes that come before the clicked node
+  while (walker.nextNode() && walker.currentNode !== clickedNode) {
+    wordIdx += (walker.currentNode.textContent ?? '').split(/\s+/).filter(Boolean).length;
+  }
+
+  // Add words before the cursor within the clicked text node
+  const before = (clickedNode.textContent ?? '').slice(0, range.startOffset);
+  wordIdx += before.split(/\s+/).filter(Boolean).length;
+
+  return wordIdx;
+}
+
 export function BookContent({
   html,
   fontSize,
@@ -125,6 +183,11 @@ export function BookContent({
   totalChapters,
   srWordIdx,
   srHighlightColor = '#fbbf24',
+  onWordRightClick,
+  onIframeClick,
+  initialPage,
+  onPageChange,
+  onSelectionChange,
 }: BookContentProps) {
   const iframeRef      = useRef<HTMLIFrameElement>(null);
   const containerRef   = useRef<HTMLDivElement>(null);
@@ -137,9 +200,36 @@ export function BookContent({
   // Prevents a click during that window from firing chapter navigation before
   // totalPages has been updated from the default 1.
   const isMeasuringRef = useRef<boolean>(false);
+  // Stable refs for callbacks — updated every render so event handlers
+  // attached in handleIframeLoad never capture stale values.
+  const onWordRightClickRef  = useRef(onWordRightClick);
+  const onIframeClickRef     = useRef(onIframeClick);
+  const onPageChangeRef      = useRef(onPageChange);
+  const onSelectionChangeRef = useRef(onSelectionChange);
+  useEffect(() => { onWordRightClickRef.current  = onWordRightClick;  }, [onWordRightClick]);
+  useEffect(() => { onIframeClickRef.current     = onIframeClick;     }, [onIframeClick]);
+  useEffect(() => { onPageChangeRef.current      = onPageChange;      }, [onPageChange]);
+  useEffect(() => { onSelectionChangeRef.current = onSelectionChange; }, [onSelectionChange]);
+
+  // Holds the page to navigate to after the next refresh (one-shot, cleared after use).
+  // pendingInitialPageRef: set from the initialPage prop (backend restore).
+  // pendingKeepPageRef: set before font-size refresh to navigate back to current page.
+  const pendingInitialPageRef = useRef(0);
+  const pendingKeepPageRef    = useRef(0);
+  // Always reflects the latest currentPage so effects can read it without stale closures.
+  const currentPageRef = useRef(0);
 
   const [currentPage, setCurrentPage] = useState(0);
   const [totalPages,  setTotalPages]  = useState(1);
+
+  // Keep currentPageRef in sync so effects that can't take currentPage as a
+  // dependency (e.g. the font-size refresh effect) always read the latest value.
+  useEffect(() => { currentPageRef.current = currentPage; }, [currentPage]);
+
+  // When initialPage prop changes, store it for use after the next refresh.
+  useEffect(() => {
+    pendingInitialPageRef.current = initialPage ?? 0;
+  }, [initialPage]);
 
   /**
    * Inject reading CSS and — for two-page mode — compute the total page count.
@@ -181,6 +271,8 @@ export function BookContent({
       doc.body.style.opacity    = '1';
       setTotalPages(1);
       setCurrentPage(0);
+      onPageChangeRef.current?.(0);
+      pendingInitialPageRef.current = 0; // no pages to restore in scroll mode
       return;
     }
 
@@ -220,6 +312,7 @@ export function BookContent({
         isMeasuringRef.current = false;
         setTotalPages(pages);
         setCurrentPage(0);
+        onPageChangeRef.current?.(0);
         if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
       });
     });
@@ -228,8 +321,120 @@ export function BookContent({
   // Run refresh when the iframe loads new content
   const handleIframeLoad = useCallback(() => refresh(), [refresh]);
 
-  // Re-inject styles and recompute pages when font size changes
-  useEffect(() => { refresh(); }, [refresh]);
+  // After totalPages is updated (after refresh), navigate to the pending page.
+  // Priority: pendingInitialPageRef (backend restore) > pendingKeepPageRef (font-size change).
+  // Both are one-shot and cleared after use.
+  useEffect(() => {
+    const fromInitial = pendingInitialPageRef.current;
+    const fromKeep    = pendingKeepPageRef.current;
+    pendingInitialPageRef.current = 0;
+    pendingKeepPageRef.current    = 0;
+    const target = fromInitial > 0 ? fromInitial : fromKeep;
+    if (target > 0 && totalPages > 1) {
+      // goToPage is declared below but defined before this effect runs at runtime
+      // (effects fire asynchronously after all hooks have executed in the render).
+      goToPage(Math.min(target, totalPages - 1));
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [totalPages]);
+
+  // Attach right-click, click, and SR entry mode listeners to the iframe's content document.
+  //
+  // Strategy: use the iframe *element*'s load event (not React's onLoad prop)
+  // so we capture the exact moment the new document is ready. We also try
+  // immediately in case the iframe is already loaded when the effect runs.
+  //
+  // We use mousedown(button=2) to detect the clicked word and open our custom
+  // menu, then contextmenu to call e.preventDefault() (suppresses the native
+  // browser menu when the click was over a word).
+  useEffect(() => {
+    const iframe = iframeRef.current;
+    if (!iframe) return;
+
+    // Whether the last right-mousedown found a readable word
+    let rightClickHasWord = false;
+
+    function attach() {
+      const doc = iframe!.contentDocument;
+      if (!doc?.body) return;
+
+      // Right-mousedown: find word + open custom menu
+      doc.addEventListener('mousedown', (e: MouseEvent) => {
+        if (e.button !== 2) return;
+        rightClickHasWord = false;
+
+        const wordIdx = getWordIndexAtPoint(doc, e.clientX, e.clientY);
+        if (wordIdx === null) return;
+
+        rightClickHasWord = true;
+        // Clear text selection so the OS "Copy" option won't appear
+        doc.getSelection()?.removeAllRanges();
+
+        const rect = iframe!.getBoundingClientRect();
+        onWordRightClickRef.current?.(
+          wordIdx,
+          rect.left + e.clientX,
+          rect.top  + e.clientY,
+        );
+      });
+
+      // Suppress native context menu only when we found a word
+      doc.addEventListener('contextmenu', (e: MouseEvent) => {
+        if (rightClickHasWord) e.preventDefault();
+      });
+
+      // Left-click: close context menu
+      doc.addEventListener('click', () => {
+        onIframeClickRef.current?.();
+      });
+
+      // Mouseup: detect text selection and report the starting word index.
+      // Fires after every mouse release — returns null when selection is collapsed.
+      doc.addEventListener('mouseup', () => {
+        const sel = doc.getSelection();
+        if (!sel || sel.isCollapsed || !sel.rangeCount) {
+          onSelectionChangeRef.current?.(null);
+          return;
+        }
+        const range = sel.getRangeAt(0);
+        const startNode = range.startContainer;
+        if (startNode.nodeType !== Node.TEXT_NODE) {
+          onSelectionChangeRef.current?.(null);
+          return;
+        }
+        let wordIdx = 0;
+        const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT, {
+          acceptNode: (node: Node) => {
+            const parent = (node as Text).parentElement;
+            if (parent && SR_SKIP_TAGS.has(parent.tagName)) return NodeFilter.FILTER_REJECT;
+            return NodeFilter.FILTER_ACCEPT;
+          },
+        });
+        while (walker.nextNode() && walker.currentNode !== startNode) {
+          wordIdx += (walker.currentNode.textContent ?? '').split(/\s+/).filter(Boolean).length;
+        }
+        const before = (startNode.textContent ?? '').slice(0, range.startOffset);
+        wordIdx += before.split(/\s+/).filter(Boolean).length;
+        onSelectionChangeRef.current?.(wordIdx);
+      });
+    }
+
+    iframe.addEventListener('load', attach);
+    attach(); // try immediately if already loaded
+
+    return () => iframe.removeEventListener('load', attach);
+  }, [html]); // re-run when html changes (iframe remounts)
+
+  // Re-inject styles and recompute pages when font size changes.
+  // Capture the current page first so useEffect([totalPages]) can navigate back
+  // to it after the refresh resets currentPage to 0.
+  // pendingInitialPageRef takes priority — don't overwrite a pending backend restore.
+  useEffect(() => {
+    if (pendingInitialPageRef.current === 0) {
+      pendingKeepPageRef.current = currentPageRef.current;
+    }
+    refresh();
+  }, [refresh]);
 
   // Reset page state immediately when the chapter html prop changes.
   // The iframe remounts (key={html}), so stale page state would flash briefly
@@ -275,6 +480,7 @@ export function BookContent({
     });
 
     setCurrentPage(page);
+    onPageChangeRef.current?.(page);
   }, []);
 
   // ── Inline speed-reader word highlight ──────────────────────────────────────
@@ -398,6 +604,7 @@ export function BookContent({
           </svg>
         </button>
       </div>
+
     </div>
   );
 }

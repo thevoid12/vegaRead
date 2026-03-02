@@ -25,6 +25,7 @@ export interface Book {
   meta_data: BookMetadata;
   current_read_idx: number;
   current_spine: number;
+  current_page: number;
   is_deleted: boolean;
 }
 
@@ -53,6 +54,7 @@ export interface ContentResponse {
   spine_idx: number;
   next_char_offset: number;
   page_size: number;  // chunk size used by the backend — used by the frontend to step back on Prev
+  current_page: number; // visual page to restore (0 on navigation, saved value on book open/restore)
 }
 
 /**

@@ -24,7 +24,7 @@ interface ReadingTopbarProps {
  * Topbar shown while reading a book.
  *
  * Right section:
- *   idle    → font-size controls + [▶ Inline] [▶ Focus] start buttons
+ *   idle    → font-size controls + [▶ Inline] [▶ Focus] start buttons + entry-mode toggle
  *   running → word counter · [⏸ Pause] [■ Stop]
  *   paused  → word counter · [▶ Resume] [■ Stop]
  */
@@ -158,7 +158,7 @@ export function ReadingTopbar({
             </button>
           </>
         ) : (
-          /* ── Idle: font controls + start buttons ── */
+          /* ── Idle: font controls + start buttons + entry mode toggle ── */
           <>
             {/* Font size controls */}
             <div className="flex items-center gap-0.5 bg-app-bg rounded-md border border-app-border px-1 py-0.5">

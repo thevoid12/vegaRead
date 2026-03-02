@@ -46,7 +46,7 @@ function App() {
       <>
         <ReadingView
           book={activeBook}
-          onBack={() => setActiveBook(null)}
+          onBack={() => { setActiveBook(null); refreshLibrary(); }}
         />
         {toastError && (
           <ErrorToast message={toastError} onDismiss={() => setToastError(null)} />

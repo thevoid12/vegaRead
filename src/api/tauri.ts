@@ -53,3 +53,44 @@ export async function listSpine(fileId: string): Promise<SpineItem[]> {
 export async function getCoverImage(fileId: string): Promise<string | null> {
   return invoke<string | null>('get_cover_image_handler', { fileId });
 }
+
+/**
+ * Saves reading position including the visual page within the current chunk.
+ * Call this (debounced) whenever the user turns a page within a content chunk.
+ * Maps to `save_reading_progress_handler`.
+ */
+export async function saveReadingProgress(
+  fileId: string,
+  spineIdx: number,
+  charOffset: number,
+  currentPage: number,
+): Promise<void> {
+  return invoke<void>('save_reading_progress_handler', {
+    fileId,
+    spineIdx,
+    charOffset,
+    currentPage,
+  });
+}
+
+/**
+ * Sends current speed-reader position to the backend for logging.
+ * Maps to `save_sr_position_handler`.
+ */
+export async function saveSrPosition(
+  fileId: string,
+  spineIdx: number,
+  charOffset: number,
+  currentPage: number,
+  wordIdx: number,
+  mode: string,
+): Promise<void> {
+  return invoke<void>('save_sr_position_handler', {
+    fileId,
+    spineIdx,
+    charOffset,
+    currentPage,
+    wordIdx,
+    mode,
+  });
+}
