@@ -248,6 +248,8 @@ pub struct vagaread{
     pub current_read_idx: usize,
     pub current_spine: usize,
     pub current_page: usize,
+    pub sr_word_idx: usize,  // parsed from speed_read_pointer
+    pub sr_mode: String,     // parsed from speed_read_pointer
     pub is_deleted: bool,
 }
 

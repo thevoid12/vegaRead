@@ -9,6 +9,7 @@ CREATE TABLE reading(
     id TEXT NOT NULL,
     vagaread_id TEXT NOT NULL,  -- foreign key
     current_read_idx TEXT NOT NULL, -- read index is the stop point from which we will continue all the time 
-    current_spine TEXT NOT NULL
+    current_spine TEXT NOT NULL,
+    speed_read_pointer TEXT NOT NULL
 )
 

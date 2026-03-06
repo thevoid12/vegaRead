@@ -18,15 +18,22 @@ interface ReadingTopbarProps {
   onResumeSR: () => void;
   onStopSR: () => void;
   onOpenSettings: () => void;
+  /**
+   * false = inactive
+   * 'inline' | 'focus' = waiting for user to click a word in the iframe
+   */
+  srEntryMode: false | SrMode;
+  onActivateEntryMode: (mode: SrMode) => void;
+  onCancelEntryMode: () => void;
 }
 
 /**
  * Topbar shown while reading a book.
  *
- * Right section:
- *   idle    → font-size controls + [▶ Inline] [▶ Focus] start buttons + entry-mode toggle
- *   running → word counter · [⏸ Pause] [■ Stop]
- *   paused  → word counter · [▶ Resume] [■ Stop]
+ * Right section — three states:
+ *   idle       → font controls + [▶ Inline] [⊕] [▶ Focus] [⊕] + settings
+ *   entry mode → "Inline/Focus — click any word to start" + Cancel
+ *   sr active  → word counter · Pause/Resume · Stop · settings
  */
 export function ReadingTopbar({
   bookTitle,
@@ -44,6 +51,9 @@ export function ReadingTopbar({
   onResumeSR,
   onStopSR,
   onOpenSettings,
+  srEntryMode,
+  onActivateEntryMode,
+  onCancelEntryMode,
 }: ReadingTopbarProps) {
   const srActive = srState !== 'idle';
 
@@ -157,8 +167,35 @@ export function ReadingTopbar({
               </svg>
             </button>
           </>
+
+        ) : srEntryMode !== false ? (
+          /* ── Entry mode: waiting for user to click a word ── */
+          <>
+            <span className="text-fg-secondary text-xs select-none">
+              <span className="font-semibold text-fg-primary capitalize">{srEntryMode}</span>
+              {' '}mode&thinsp;—&thinsp;click any word to start
+            </span>
+            <button
+              type="button"
+              onClick={onCancelEntryMode}
+              className="
+                inline-flex items-center gap-1
+                text-fg-secondary hover:text-fg-primary
+                rounded-md px-2.5 py-1.5 ml-1
+                text-xs font-medium transition-colors hover:bg-app-hover
+                border border-app-border
+              "
+              aria-label="Cancel entry mode"
+            >
+              <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <path d="M18 6L6 18M6 6l12 12" />
+              </svg>
+              Cancel
+            </button>
+          </>
+
         ) : (
-          /* ── Idle: font controls + start buttons + entry mode toggle ── */
+          /* ── Idle: font controls + start buttons + entry mode ── */
           <>
             {/* Font size controls */}
             <div className="flex items-center gap-0.5 bg-app-bg rounded-md border border-app-border px-1 py-0.5">
@@ -189,44 +226,79 @@ export function ReadingTopbar({
               </button>
             </div>
 
-            {/* Inline speed-read */}
-            <button
-              type="button"
-              onClick={() => onStartSR('inline')}
-              className="
-                inline-flex items-center gap-1.5
-                bg-app-hover text-fg-secondary hover:text-fg-primary
-                border border-app-border
-                rounded-md px-2.5 py-1.5 ml-1
-                text-xs font-medium transition-colors hover:bg-app-border
-                select-none
-              "
-              title="Inline speed read — highlight word-by-word in the book"
-            >
-              <svg className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-                <polygon points="5,3 19,12 5,21" />
-              </svg>
-              Inline
-            </button>
+            {/* Inline speed-read group: start + pick word */}
+            <div className="flex items-center ml-1 rounded-md overflow-hidden border border-app-border">
+              <button
+                type="button"
+                onClick={() => onStartSR('inline')}
+                className="
+                  inline-flex items-center gap-1.5
+                  bg-app-hover text-fg-secondary hover:text-fg-primary
+                  px-2.5 py-1.5
+                  text-xs font-medium transition-colors hover:bg-app-border
+                  select-none border-r border-app-border
+                "
+                title="Inline speed read — highlight word-by-word in the book"
+              >
+                <svg className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                  <polygon points="5,3 19,12 5,21" />
+                </svg>
+                Inline
+              </button>
+              <button
+                type="button"
+                onClick={() => onActivateEntryMode('inline')}
+                className="
+                  w-7 h-full flex items-center justify-center
+                  bg-app-hover text-fg-secondary hover:text-fg-primary hover:bg-app-border
+                  transition-colors select-none
+                "
+                title="Pick a word to start Inline SR from that position"
+                aria-label="Start Inline SR from a specific word"
+              >
+                <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                  <circle cx="12" cy="12" r="3" />
+                  <path d="M12 2v4M12 18v4M2 12h4M18 12h4" />
+                </svg>
+              </button>
+            </div>
 
-            {/* Focus (RSVP) speed-read */}
-            <button
-              type="button"
-              onClick={() => onStartSR('focus')}
-              className="
-                inline-flex items-center gap-1.5
-                bg-accent text-white
-                rounded-md px-2.5 py-1.5
-                text-xs font-medium transition-colors hover:bg-accent/90
-                select-none
-              "
-              title="Focus speed read — one word at a time in an overlay"
-            >
-              <svg className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-                <polygon points="5,3 19,12 5,21" />
-              </svg>
-              Focus
-            </button>
+            {/* Focus (RSVP) speed-read group: start + pick word */}
+            <div className="flex items-center rounded-md overflow-hidden border border-accent">
+              <button
+                type="button"
+                onClick={() => onStartSR('focus')}
+                className="
+                  inline-flex items-center gap-1.5
+                  bg-accent text-white hover:bg-accent/90
+                  px-2.5 py-1.5
+                  text-xs font-medium transition-colors
+                  select-none border-r border-accent/50
+                "
+                title="Focus speed read — one word at a time in an overlay"
+              >
+                <svg className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                  <polygon points="5,3 19,12 5,21" />
+                </svg>
+                Focus
+              </button>
+              <button
+                type="button"
+                onClick={() => onActivateEntryMode('focus')}
+                className="
+                  w-7 h-full flex items-center justify-center
+                  bg-accent text-white/80 hover:text-white hover:bg-accent/90
+                  transition-colors select-none
+                "
+                title="Pick a word to start Focus SR from that position"
+                aria-label="Start Focus SR from a specific word"
+              >
+                <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                  <circle cx="12" cy="12" r="3" />
+                  <path d="M12 2v4M12 18v4M2 12h4M18 12h4" />
+                </svg>
+              </button>
+            </div>
 
             {/* Settings */}
             <button

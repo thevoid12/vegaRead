@@ -26,6 +26,8 @@ export interface Book {
   current_read_idx: number;
   current_spine: number;
   current_page: number;
+  sr_word_idx: number;   // restored SR word position within the loaded chunk (0 = none saved)
+  sr_mode: string;       // "inline" | "focus"
   is_deleted: boolean;
 }
 

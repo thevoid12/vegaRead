@@ -74,18 +74,28 @@ pub async fn save_reading_progress_handler(
     }).await
 }
 
-/// Receives the current speed-reader position when SR is paused or stopped.
-/// For now just prints — the SR position table will be designed separately.
+/// Saves the current speed-reader position. Called on pause, stop (word=0), back, and close.
+/// Also updates the reading progress (spine/char/page) in the same call.
 #[tauri::command]
 pub async fn save_sr_position_handler(
     req: models::SaveSrPositionRequestRaw,
+    pool: State<'_, SqlitePool>,
 ) -> Result<(), ApplicationError> {
     let req = models::SaveSrPositionRequest::validate(req)?;
+    let id = req.file_id().to_string();
+    let pointer = format!("{}:{}", req.word_idx(), req.mode());
     println!(
         "[SR position] book={} spine={} char_offset={} page={} word={} mode={}",
         req.file_id(), req.spine_idx(), req.char_offset(), req.current_page(), req.word_idx(), req.mode()
     );
-    Ok(())
+    // Save reading position and SR pointer atomically
+    db::update_vb_record(pool.inner(), models::update_vr {
+        vagaread_id: id.clone(),
+        current_read_idx: req.char_offset(),
+        current_spine: req.spine_idx(),
+        current_page: req.current_page(),
+    }).await?;
+    db::update_sr_position(pool.inner(), &id, &pointer).await
 }
 
 // core logic shared by both handlers — takes &SqlitePool directly, no State wrapper
@@ -110,6 +120,8 @@ async fn load_file_core(app: &tauri::AppHandle, file_path: &str, pool: &SqlitePo
         current_read_idx: 0,
         current_spine: 0,
         current_page: 0,
+        sr_word_idx: 0,
+        sr_mode: "inline".to_string(), //TODO: this line is a bug
         is_deleted: false,
     };
     db::create_record(pool, vr_record).await?;

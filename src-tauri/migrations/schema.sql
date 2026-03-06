@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS vagaread(
     current_read_idx TEXT NOT NULL, -- read index is the stop point from which we will continue all the time
     current_spine TEXT NOT NULL,
     current_page TEXT NOT NULL DEFAULT '0', -- visual page within the current chunk (frontend CSS column page)
+    speed_read_pointer TEXT NOT NULL DEFAULT '0:inline', -- "{word_idx}:{mode}" saved SR position within the loaded chunk
     created_on TIMESTAMP NOT NULL,
     updated_on TIMESTAMP NOT NULL,
     is_deleted BOOL NOT NULL

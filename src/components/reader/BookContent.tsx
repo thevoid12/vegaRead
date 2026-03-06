@@ -27,11 +27,13 @@ interface BookContentProps {
   /** Called whenever the visible page changes (goToPage or after refresh). */
   onPageChange?: (page: number) => void;
   /**
-   * Called when the user makes (or clears) a text selection inside the iframe.
-   * wordIdx is the zero-based index of the first selected word, or null when
-   * the selection is collapsed / empty.
+   * When set to 'inline' or 'focus', the iframe shows a crosshair cursor and
+   * left-clicking any word fires onSrWordClick with that word's index.
+   * The wrapping HTML (with data-sr spans) must already be in the `html` prop.
    */
-  onSelectionChange?: (wordIdx: number | null) => void;
+  srEntryMode?: false | string;
+  /** Called when user clicks a word while srEntryMode is active. */
+  onSrWordClick?: (wordIdx: number) => void;
 }
 
 /**
@@ -187,7 +189,8 @@ export function BookContent({
   onIframeClick,
   initialPage,
   onPageChange,
-  onSelectionChange,
+  srEntryMode,
+  onSrWordClick,
 }: BookContentProps) {
   const iframeRef      = useRef<HTMLIFrameElement>(null);
   const containerRef   = useRef<HTMLDivElement>(null);
@@ -202,14 +205,59 @@ export function BookContent({
   const isMeasuringRef = useRef<boolean>(false);
   // Stable refs for callbacks — updated every render so event handlers
   // attached in handleIframeLoad never capture stale values.
-  const onWordRightClickRef  = useRef(onWordRightClick);
-  const onIframeClickRef     = useRef(onIframeClick);
-  const onPageChangeRef      = useRef(onPageChange);
-  const onSelectionChangeRef = useRef(onSelectionChange);
-  useEffect(() => { onWordRightClickRef.current  = onWordRightClick;  }, [onWordRightClick]);
-  useEffect(() => { onIframeClickRef.current     = onIframeClick;     }, [onIframeClick]);
-  useEffect(() => { onPageChangeRef.current      = onPageChange;      }, [onPageChange]);
-  useEffect(() => { onSelectionChangeRef.current = onSelectionChange; }, [onSelectionChange]);
+  const onWordRightClickRef = useRef(onWordRightClick);
+  const onIframeClickRef    = useRef(onIframeClick);
+  const onPageChangeRef     = useRef(onPageChange);
+  const onSrWordClickRef    = useRef(onSrWordClick);
+  useEffect(() => { onWordRightClickRef.current = onWordRightClick;   }, [onWordRightClick]);
+  useEffect(() => { onIframeClickRef.current    = onIframeClick;      }, [onIframeClick]);
+  useEffect(() => { onPageChangeRef.current     = onPageChange;       }, [onPageChange]);
+  useEffect(() => { onSrWordClickRef.current    = onSrWordClick;      }, [onSrWordClick]);
+
+  // Incremented on every iframe load — forces CSS injection effects to re-run
+  // after a remount, since the new document is blank until the load event fires.
+  const [iframeVersion, setIframeVersion] = useState(0);
+
+  // Cursor CSS + entry-mode click listener.
+  // Both are managed together so the click handler is always set up when the
+  // cursor is active, guaranteed to run after the iframe loads via iframeVersion.
+  useEffect(() => {
+    const doc = iframeRef.current?.contentDocument;
+    if (!doc?.head) return;
+
+    if (!srEntryMode) {
+      doc.getElementById('sr-entry-cursor')?.remove();
+      return;
+    }
+
+    // Inject cursor + hover CSS
+    let styleEl = doc.getElementById('sr-entry-cursor') as HTMLStyleElement | null;
+    if (!styleEl) {
+      styleEl = doc.createElement('style');
+      styleEl.id = 'sr-entry-cursor';
+      doc.head.appendChild(styleEl);
+    }
+    styleEl.textContent = `
+      * { cursor: crosshair !important; }
+      [data-sr]:hover { background: rgba(59,130,246,0.18) !important; border-radius: 2px; }
+    `;
+
+    // Entry-mode click: find the clicked data-sr span and fire onSrWordClick
+    function handleEntryClick(e: MouseEvent) {
+      const srSpan = (e.target as Element).closest?.('[data-sr]') as HTMLElement | null;
+      if (!srSpan) return;
+      const wordIdx = parseInt(srSpan.getAttribute('data-sr') ?? '', 10);
+      if (isNaN(wordIdx) || wordIdx < 0) return;
+      onSrWordClickRef.current?.(wordIdx);
+    }
+
+    doc.addEventListener('click', handleEntryClick);
+    return () => {
+      doc.removeEventListener('click', handleEntryClick);
+      doc.getElementById('sr-entry-cursor')?.remove();
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [srEntryMode, iframeVersion]);
 
   // Holds the page to navigate to after the next refresh (one-shot, cleared after use).
   // pendingInitialPageRef: set from the initialPage prop (backend restore).
@@ -219,8 +267,8 @@ export function BookContent({
   // Always reflects the latest currentPage so effects can read it without stale closures.
   const currentPageRef = useRef(0);
 
-  const [currentPage, setCurrentPage] = useState(0);
-  const [totalPages,  setTotalPages]  = useState(1);
+  const [currentPage,   setCurrentPage]   = useState(0);
+  const [totalPages,    setTotalPages]    = useState(1);
 
   // Keep currentPageRef in sync so effects that can't take currentPage as a
   // dependency (e.g. the font-size refresh effect) always read the latest value.
@@ -318,8 +366,13 @@ export function BookContent({
     });
   }, [fontSize]);
 
-  // Run refresh when the iframe loads new content
-  const handleIframeLoad = useCallback(() => refresh(), [refresh]);
+  // Run refresh when the iframe loads new content.
+  // Also bump iframeVersion so CSS injection effects (highlight, cursor) re-run
+  // against the freshly loaded document.
+  const handleIframeLoad = useCallback(() => {
+    refresh();
+    setIframeVersion(v => v + 1);
+  }, [refresh]);
 
   // After totalPages is updated (after refresh), navigate to the pending page.
   // Priority: pendingInitialPageRef (backend restore) > pendingKeepPageRef (font-size change).
@@ -383,39 +436,9 @@ export function BookContent({
         if (rightClickHasWord) e.preventDefault();
       });
 
-      // Left-click: close context menu
+      // Left-click: close context menu (entry-mode word clicks handled separately)
       doc.addEventListener('click', () => {
         onIframeClickRef.current?.();
-      });
-
-      // Mouseup: detect text selection and report the starting word index.
-      // Fires after every mouse release — returns null when selection is collapsed.
-      doc.addEventListener('mouseup', () => {
-        const sel = doc.getSelection();
-        if (!sel || sel.isCollapsed || !sel.rangeCount) {
-          onSelectionChangeRef.current?.(null);
-          return;
-        }
-        const range = sel.getRangeAt(0);
-        const startNode = range.startContainer;
-        if (startNode.nodeType !== Node.TEXT_NODE) {
-          onSelectionChangeRef.current?.(null);
-          return;
-        }
-        let wordIdx = 0;
-        const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT, {
-          acceptNode: (node: Node) => {
-            const parent = (node as Text).parentElement;
-            if (parent && SR_SKIP_TAGS.has(parent.tagName)) return NodeFilter.FILTER_REJECT;
-            return NodeFilter.FILTER_ACCEPT;
-          },
-        });
-        while (walker.nextNode() && walker.currentNode !== startNode) {
-          wordIdx += (walker.currentNode.textContent ?? '').split(/\s+/).filter(Boolean).length;
-        }
-        const before = (startNode.textContent ?? '').slice(0, range.startOffset);
-        wordIdx += before.split(/\s+/).filter(Boolean).length;
-        onSelectionChangeRef.current?.(wordIdx);
       });
     }
 
@@ -520,7 +543,8 @@ export function BookContent({
     } else {
       el.scrollIntoView({ block: 'center', behavior: 'smooth' });
     }
-  }, [srWordIdx, currentPage, goToPage]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [srWordIdx, srHighlightColor, currentPage, goToPage, iframeVersion]);
 
   const handleNext = () => {
     // Ignore clicks while refresh() is still computing totalPages — otherwise
