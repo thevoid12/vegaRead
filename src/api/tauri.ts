@@ -11,19 +11,17 @@ export async function fetchAllBooks(): Promise<Book[]> {
 
 /**
  * Imports an EPUB file into the library by its absolute path on disk.
- * Maps to the Rust `upload_file_handler` command.
- * Returns the ContentResponse for the first chunk of the newly imported book.
+ * Maps to `upload_file_handler` (UploadFileRequestRaw).
  */
 export async function uploadFile(filePath: string): Promise<ContentResponse> {
-  return invoke<ContentResponse>('upload_file_handler', { filePath });
+  return invoke<ContentResponse>('upload_file_handler', {
+    req: { file_path: filePath },
+  });
 }
 
 /**
  * Fetches paginated HTML content for a book chapter.
- * Maps to `get_ebook_content_handler`.
- * spineIdx    = which spine item (chapter) to load, 0-based.
- * charOffset  = character offset within that spine item (0 = from the start).
- * Returns BookResponse: { vagaread_id, content: { content, spine_idx, next_char_offset } }
+ * Maps to `get_ebook_content_handler` (GetEbookContentRequestRaw).
  */
 export async function getBookContent(
   fileId: string,
@@ -31,33 +29,33 @@ export async function getBookContent(
   charOffset: number,
 ): Promise<BookResponse> {
   return invoke<BookResponse>('get_ebook_content_handler', {
-    fileId,
-    spineIdx,
-    charOffset,
+    req: { file_id: fileId, spine_idx: spineIdx, char_offset: charOffset },
   });
 }
 
 /**
  * Fetches the ordered spine (chapter list) for a book.
- * Maps to `list_spine_handler`.
+ * Maps to `list_spine_handler` (ListSpineRequestRaw).
  */
 export async function listSpine(fileId: string): Promise<SpineItem[]> {
-  return invoke<SpineItem[]>('list_spine_handler', { fileId });
+  return invoke<SpineItem[]>('list_spine_handler', {
+    req: { file_id: fileId },
+  });
 }
 
 /**
- * Returns the cover image as a data URI (e.g. "data:image/jpeg;base64,..."),
- * or null if the EPUB has no declared cover image.
- * Maps to `get_cover_image_handler`.
+ * Returns the cover image as a data URI, or null if none.
+ * Maps to `get_cover_image_handler` (GetCoverImageRequestRaw).
  */
 export async function getCoverImage(fileId: string): Promise<string | null> {
-  return invoke<string | null>('get_cover_image_handler', { fileId });
+  return invoke<string | null>('get_cover_image_handler', {
+    req: { file_id: fileId },
+  });
 }
 
 /**
  * Saves reading position including the visual page within the current chunk.
- * Call this (debounced) whenever the user turns a page within a content chunk.
- * Maps to `save_reading_progress_handler`.
+ * Maps to `save_reading_progress_handler` (SaveReadingProgressRequestRaw).
  */
 export async function saveReadingProgress(
   fileId: string,
@@ -66,16 +64,18 @@ export async function saveReadingProgress(
   currentPage: number,
 ): Promise<void> {
   return invoke<void>('save_reading_progress_handler', {
-    fileId,
-    spineIdx,
-    charOffset,
-    currentPage,
+    req: {
+      file_id: fileId,
+      spine_idx: spineIdx,
+      char_offset: charOffset,
+      current_page: currentPage,
+    },
   });
 }
 
 /**
  * Sends current speed-reader position to the backend for logging.
- * Maps to `save_sr_position_handler`.
+ * Maps to `save_sr_position_handler` (SaveSrPositionRequestRaw).
  */
 export async function saveSrPosition(
   fileId: string,
@@ -86,11 +86,13 @@ export async function saveSrPosition(
   mode: string,
 ): Promise<void> {
   return invoke<void>('save_sr_position_handler', {
-    fileId,
-    spineIdx,
-    charOffset,
-    currentPage,
-    wordIdx,
-    mode,
+    req: {
+      file_id: fileId,
+      spine_idx: spineIdx,
+      char_offset: charOffset,
+      current_page: currentPage,
+      word_idx: wordIdx,
+      mode,
+    },
   });
 }

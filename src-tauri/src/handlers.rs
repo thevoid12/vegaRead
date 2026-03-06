@@ -27,27 +27,29 @@ pub async fn show_home_page_handler(app: tauri::AppHandle, pool: State<'_, Sqlit
 
 // this handler is called when user uploads a file
 #[tauri::command]
-pub async fn upload_file_handler(app: tauri::AppHandle, file_path: String, pool: State<'_, SqlitePool>) -> Result<Content_response, ApplicationError> {
-    // TODO: backend sanitization and validation needs to be learnt and done
-    load_file_core(&app, &file_path, pool.inner()).await
+pub async fn upload_file_handler(app: tauri::AppHandle, req: models::UploadFileRequestRaw, pool: State<'_, SqlitePool>) -> Result<Content_response, ApplicationError> {
+    let req = models::UploadFileRequest::validate(req)?;
+    load_file_core(&app, req.file_path(), pool.inner()).await
 }
 
 #[tauri::command]
-pub async fn get_ebook_content_handler(_app: tauri::AppHandle, file_id: uuid::Uuid,spine_idx: usize,char_offset: usize, pool: State<'_, SqlitePool>) -> Result<models::book_response, ApplicationError> {
-    // TODO: backend sanitization and validation needs to be learnt and done
-    get_ebook_content_paginated(pool.inner(),file_id,spine_idx,char_offset).await
+pub async fn get_ebook_content_handler(_app: tauri::AppHandle, req: models::GetEbookContentRequestRaw, pool: State<'_, SqlitePool>) -> Result<models::book_response, ApplicationError> {
+    let req = models::GetEbookContentRequest::validate(req)?;
+    get_ebook_content_paginated(pool.inner(), req.file_id(), req.spine_idx(), req.char_offset()).await
 }
 
 #[tauri::command]
-pub async fn list_spine_handler(file_id: uuid::Uuid, pool: State<'_, SqlitePool>) -> Result<Vec<models::Spine_item_response>, ApplicationError> {
-        let record = db::get_vb_record_by_id(pool.inner(), file_id.to_string()).await?; // TODO: lets me think and find a way to find a way to just fetch once and use it all the time store it in tauri storage hashmap where key is file id
-        epub_util::get_epub_spine(&record.internal_fp)
+pub async fn list_spine_handler(req: models::ListSpineRequestRaw, pool: State<'_, SqlitePool>) -> Result<Vec<models::Spine_item_response>, ApplicationError> {
+    let req = models::ListSpineRequest::validate(req)?;
+    let record = db::get_vb_record_by_id(pool.inner(), req.file_id().to_string()).await?;
+    epub_util::get_epub_spine(&record.internal_fp)
 }
 
 /// Returns the cover image as a data URI ("data:image/jpeg;base64,..."), or null if none.
 #[tauri::command]
-pub async fn get_cover_image_handler(file_id: uuid::Uuid, pool: State<'_, SqlitePool>) -> Result<Option<String>, ApplicationError> {
-    let record = db::get_vb_record_by_id(pool.inner(), file_id.to_string()).await?;
+pub async fn get_cover_image_handler(req: models::GetCoverImageRequestRaw, pool: State<'_, SqlitePool>) -> Result<Option<String>, ApplicationError> {
+    let req = models::GetCoverImageRequest::validate(req)?;
+    let record = db::get_vb_record_by_id(pool.inner(), req.file_id().to_string()).await?;
     epub_util::extract_cover_as_data_uri(&record.internal_fp)
 }
 
@@ -55,22 +57,20 @@ pub async fn get_cover_image_handler(file_id: uuid::Uuid, pool: State<'_, Sqlite
 /// Called by the frontend whenever the user turns a page within the same content chunk.
 #[tauri::command]
 pub async fn save_reading_progress_handler(
-    file_id: uuid::Uuid,
-    spine_idx: usize,
-    char_offset: usize,
-    current_page: usize,
+    req: models::SaveReadingProgressRequestRaw,
     pool: State<'_, SqlitePool>,
 ) -> Result<(), ApplicationError> {
-    let record = db::get_vb_record_by_id(pool.inner(), file_id.to_string()).await?;
+    let req = models::SaveReadingProgressRequest::validate(req)?;
+    let record = db::get_vb_record_by_id(pool.inner(), req.file_id().to_string()).await?;
     println!(
         "[progress] book={} spine={} char_offset={} page={}",
-        file_id, spine_idx, char_offset, current_page
+        req.file_id(), req.spine_idx(), req.char_offset(), req.current_page()
     );
     db::update_vb_record(pool.inner(), models::update_vr {
         vagaread_id: record.vagaread_id.to_string(),
-        current_read_idx: char_offset,
-        current_spine: spine_idx,
-        current_page,
+        current_read_idx: req.char_offset(),
+        current_spine: req.spine_idx(),
+        current_page: req.current_page(),
     }).await
 }
 
@@ -78,16 +78,12 @@ pub async fn save_reading_progress_handler(
 /// For now just prints — the SR position table will be designed separately.
 #[tauri::command]
 pub async fn save_sr_position_handler(
-    file_id: uuid::Uuid,
-    spine_idx: usize,
-    char_offset: usize,
-    current_page: usize,
-    word_idx: usize,
-    mode: String,
+    req: models::SaveSrPositionRequestRaw,
 ) -> Result<(), ApplicationError> {
+    let req = models::SaveSrPositionRequest::validate(req)?;
     println!(
         "[SR position] book={} spine={} char_offset={} page={} word={} mode={}",
-        file_id, spine_idx, char_offset, current_page, word_idx, mode
+        req.file_id(), req.spine_idx(), req.char_offset(), req.current_page(), req.word_idx(), req.mode()
     );
     Ok(())
 }
@@ -122,7 +118,7 @@ async fn load_file_core(app: &tauri::AppHandle, file_path: &str, pool: &SqlitePo
     Ok(content)
 }
 
-async fn get_ebook_content_paginated(pool: &SqlitePool, file_id: uuid::Uuid, mut spine_idx: usize, mut char_offset: usize) -> Result<models::book_response, ApplicationError> {
+async fn get_ebook_content_paginated(pool: &SqlitePool, file_id: uuid::Uuid, spine_idx: usize, char_offset: usize) -> Result<models::book_response, ApplicationError> {
     let record = db::get_vb_record_by_id(pool, file_id.to_string()).await?;
 
     let restore_page;
