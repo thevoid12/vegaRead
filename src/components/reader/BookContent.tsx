@@ -581,7 +581,7 @@ export function BookContent({
           title="Book content"
           className="w-full h-full border-none block"
           onLoad={handleIframeLoad}
-          sandbox="allow-same-origin"
+          sandbox="allow-same-origin allow-scripts"
         />
       </div>
 

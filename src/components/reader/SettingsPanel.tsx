@@ -20,6 +20,8 @@ interface SettingsPanelProps {
   onInlineHighlightColorChange: (color: string) => void;
   focusWordColor: string;
   onFocusWordColorChange: (color: string) => void;
+  focusBackgroundMode: 'static' | 'tracking' | 'opaque';
+  onFocusBackgroundModeChange: (mode: 'static' | 'tracking' | 'opaque') => void;
 }
 
 /**
@@ -42,6 +44,8 @@ export function SettingsPanel({
   onInlineHighlightColorChange,
   focusWordColor,
   onFocusWordColorChange,
+  focusBackgroundMode,
+  onFocusBackgroundModeChange,
 }: SettingsPanelProps) {
   return (
     <>
@@ -181,8 +185,30 @@ export function SettingsPanel({
                   aria-label="Inline highlight color"
                 />
               </span>
-              <span className="text-sm font-mono text-fg-secondary">{inlineHighlightColor}</span>
+              <span className="text-sm font-mono text-fg-primary">{inlineHighlightColor}</span>
             </label>
+          </section>
+
+          {/* ── Focus background mode ── */}
+          <section className="flex flex-col gap-2">
+            <span className="text-[11px] font-semibold text-fg-secondary uppercase tracking-wider">Focus Background</span>
+            <div className="flex rounded-lg overflow-hidden border border-app-border text-xs font-medium">
+              {(['static', 'tracking', 'opaque'] as const).map((mode, i) => (
+                <button
+                  key={mode}
+                  type="button"
+                  onClick={() => onFocusBackgroundModeChange(mode)}
+                  className={`flex-1 py-1.5 transition-colors select-none ${i > 0 ? 'border-l border-app-border' : ''} ${focusBackgroundMode === mode ? 'bg-accent text-white' : 'text-fg-secondary hover:bg-app-hover'}`}
+                >
+                  {mode === 'static' ? 'Static' : mode === 'tracking' ? 'Tracking' : 'Opaque'}
+                </button>
+              ))}
+            </div>
+            <span className="text-[11px] text-fg-muted">
+              {focusBackgroundMode === 'static' && 'Book visible behind overlay, no word tracking'}
+              {focusBackgroundMode === 'tracking' && 'Book visible, highlight follows current word'}
+              {focusBackgroundMode === 'opaque' && 'Solid dark background, no book visible'}
+            </span>
           </section>
 
           {/* ── Focus word color ── */}
@@ -202,7 +228,7 @@ export function SettingsPanel({
                   aria-label="Focus word color"
                 />
               </span>
-              <span className="text-sm font-mono text-fg-secondary">{focusWordColor}</span>
+              <span className="text-sm font-mono text-fg-primary">{focusWordColor}</span>
             </label>
           </section>
 

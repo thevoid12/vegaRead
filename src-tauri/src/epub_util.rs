@@ -172,9 +172,14 @@ pub fn get_paginated_content(fp: &str, mut spine_idx: usize, mut char_offset: us
     // render correctly inside an iframe srcDoc that has no base URL.
     let content_with_images = inline_images_in_html(&string_chunk, &spine_path, &mut doc);
 
+    // Strip <script> blocks and on* event-handler attributes before sending to
+    // the frontend.  The sandboxed iframe (no allow-scripts) would block them
+    // and in WebKit that also intercepts click events, preventing SR from working.
+    // Stripping happens AFTER pagination so saved char offsets stay valid.
+    let content_sanitized = strip_scripts(&strip_event_handlers(&content_with_images));
 
     Ok(models::Content_response {
-        content: content_with_images,
+        content: content_sanitized,
         spine_idx,
         next_char_offset: char_offset,
         page_size: models::Content_response::PAGE_SIZE,
@@ -269,6 +274,109 @@ fn rewrite_src_attr(
     let before = &tag[..src_pos + 4 + val_start]; // up to and including opening quote
     let after  = &tag[src_pos + 4 + val_start + val_end..]; // from closing quote onward
     format!("{}{}{}", before, data_uri, after)
+}
+
+/// Removes `<script>…</script>` blocks from an HTML string.
+///
+/// Uses `to_ascii_lowercase()` for case-insensitive matching, which produces a
+/// string of identical byte length so byte positions are interchangeable between
+/// the original and the lowercased copy.  All other bytes are copied unchanged,
+/// preserving the original casing and UTF-8 content of the document.
+fn strip_scripts(html: &str) -> String {
+    let lower = html.to_ascii_lowercase();
+    let mut out = String::with_capacity(html.len());
+    let mut pos = 0;
+    loop {
+        match lower[pos..].find("<script") {
+            None => { out.push_str(&html[pos..]); break; }
+            Some(rel) => {
+                let start = pos + rel;
+                let kw_end = start + 7; // byte after "script"
+                // Only strip if the next byte makes this a real tag
+                // (whitespace, '>', '/', or end-of-string).
+                match html.as_bytes().get(kw_end) {
+                    Some(&b) if !matches!(b, b' '|b'\t'|b'\n'|b'\r'|b'>'|b'/') => {
+                        out.push_str(&html[pos..kw_end]);
+                        pos = kw_end;
+                        continue;
+                    }
+                    _ => {}
+                }
+                out.push_str(&html[pos..start]);
+                match lower[start..].find("</script") {
+                    None => break, // malformed — drop to end
+                    Some(end_rel) => {
+                        let end_abs = start + end_rel;
+                        match lower[end_abs..].find('>') {
+                            None => break,
+                            Some(gt_rel) => pos = end_abs + gt_rel + 1,
+                        }
+                    }
+                }
+            }
+        }
+    }
+    out
+}
+
+/// Removes `on*="…"` and `on*='…'` event-handler attributes from HTML.
+///
+/// Works at the byte level.  Whitespace + "on" + alphabetic char + more
+/// alphanumeric chars + "=" + quoted value is recognised as an event handler
+/// and omitted from the output.  Non-ASCII content is passed through unchanged.
+fn strip_event_handlers(html: &str) -> String {
+    let lower = html.to_ascii_lowercase();
+    let lb = lower.as_bytes();
+    let hb = html.as_bytes();
+    let mut out: Vec<u8> = Vec::with_capacity(html.len());
+    let mut i = 0;
+    while i < hb.len() {
+        // Look for a whitespace byte that could precede an on* attribute.
+        if !matches!(hb[i], b' '|b'\t'|b'\n'|b'\r') {
+            out.push(hb[i]);
+            i += 1;
+            continue;
+        }
+        // After whitespace, check for "on" + alpha.
+        let j = i + 1;
+        if j + 2 < hb.len()
+            && lb[j]   == b'o'
+            && lb[j+1] == b'n'
+            && lb[j+2].is_ascii_alphabetic()
+        {
+            // Scan to end of attribute name (alphanumeric).
+            let mut k = j;
+            while k < hb.len() && lb[k].is_ascii_alphanumeric() { k += 1; }
+            // Skip optional whitespace before '='.
+            let mut m = k;
+            while m < hb.len() && matches!(hb[m], b' '|b'\t') { m += 1; }
+            if m < hb.len() && hb[m] == b'=' {
+                m += 1; // skip '='
+                while m < hb.len() && matches!(hb[m], b' '|b'\t') { m += 1; }
+                // Skip the attribute value.
+                if m < hb.len() {
+                    let q = hb[m];
+                    if q == b'"' || q == b'\'' {
+                        m += 1; // skip opening quote
+                        while m < hb.len() && hb[m] != q { m += 1; }
+                        if m < hb.len() { m += 1; } // skip closing quote
+                    } else {
+                        // Unquoted value: scan to whitespace or '>'.
+                        while m < hb.len() && !matches!(hb[m], b' '|b'\t'|b'>'|b'\n'|b'\r') {
+                            m += 1;
+                        }
+                    }
+                }
+                // Attribute stripped — do NOT push the leading whitespace or the attribute.
+                i = m;
+                continue;
+            }
+        }
+        // Not an event handler; pass the whitespace through.
+        out.push(hb[i]);
+        i += 1;
+    }
+    String::from_utf8_lossy(&out).into_owned()
 }
 
 /// Joins `base_dir` with `relative` and collapses any `..` / `.` components,

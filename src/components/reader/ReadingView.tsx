@@ -7,7 +7,7 @@ import { BookContent } from './BookContent';
 import { FocusOverlay } from './FocusOverlay';
 import { SettingsPanel } from './SettingsPanel';
 import { getBookContent, listSpine, saveReadingProgress, saveSrPosition } from '../../api/tauri';
-import { wrapWordsInSpans, extractWords } from '../../utils/speedReader';
+import { wrapWordsInSpans, extractWords, sanitizeEpubHtml } from '../../utils/speedReader';
 import type { Book, SpineItem } from '../../types';
 
 const FONT_SIZE_MIN     = 12;
@@ -81,10 +81,15 @@ export function ReadingView({ book, onBack }: ReadingViewProps) {
   const [srFocusFontSize, setSrFocusFontSize] = useState(SR_FOCUS_FONT_DEFAULT);
   const [srWpm,           setSrWpm]           = useState(SR_WPM_DEFAULT);
 
+  // Stable ref for srWrappedHtml — lets handleStartSRFrom check it without
+  // adding srWrappedHtml as a dependency (which would cause stale closures).
+  const srWrappedHtmlRef = useRef('');
+
   // ── Settings ──────────────────────────────────────────────────────────────
-  const [settingsOpen,     setSettingsOpen]     = useState(false);
-  const [srHighlightColor, setSrHighlightColor] = useState(SR_HIGHLIGHT_DEFAULT);
-  const [focusWordColor,   setFocusWordColor]   = useState(SR_FOCUS_COLOR_DEFAULT);
+  const [settingsOpen,       setSettingsOpen]       = useState(false);
+  const [srHighlightColor,   setSrHighlightColor]   = useState(SR_HIGHLIGHT_DEFAULT);
+  const [focusWordColor,     setFocusWordColor]     = useState(SR_FOCUS_COLOR_DEFAULT);
+  const [focusBackgroundMode, setFocusBackgroundMode] = useState<'static' | 'tracking' | 'opaque'>('tracking');
 
   // ── SR entry mode (crosshair — click a word to start SR directly in that mode) ─
   // false = inactive; 'inline' | 'focus' = waiting for user to click a word
@@ -124,6 +129,7 @@ export function ReadingView({ book, onBack }: ReadingViewProps) {
   useEffect(() => { currentPageRef.current     = currentPage;     }, [currentPage]);
   useEffect(() => { srModeRef.current          = srMode;          }, [srMode]);
   useEffect(() => { srStateRef.current         = srState;         }, [srState]);
+  useEffect(() => { srWrappedHtmlRef.current   = srWrappedHtml;   }, [srWrappedHtml]);
 
   // Debounce timer for within-chunk page saves
   const saveProgressDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -332,14 +338,19 @@ export function ReadingView({ book, onBack }: ReadingViewProps) {
 
     if (mode === 'inline') {
       if (srState !== 'idle' && srMode === 'inline') {
+        // Already in inline SR — just jump to the new position
         clearSRTimer();
         setSrState('running');
         startSRTimerFrom(fromWordIdx);
       } else {
-        const { html, wordCount } = wrapWordsInSpans(htmlContent);
-        setSrWrappedHtml(html);
-        setSrWordCount(wordCount);
-        srWordCountRef.current = wordCount;
+        // Reuse existing wrapped HTML if available (e.g. set by entry mode) to
+        // avoid an unnecessary iframe remount. Only regenerate when needed.
+        if (!srWrappedHtmlRef.current) {
+          const { html, wordCount } = wrapWordsInSpans(htmlContent);
+          setSrWrappedHtml(html);
+          setSrWordCount(wordCount);
+          srWordCountRef.current = wordCount;
+        }
         setSrState('running');
         startSRTimerFrom(fromWordIdx);
       }
@@ -441,7 +452,7 @@ export function ReadingView({ book, onBack }: ReadingViewProps) {
     setIsLoadingContent(true);
     getBookContent(book.vagaread_id, currentSpineIdx, charOffset)
       .then((res) => {
-        setHtmlContent(res.content.content);
+        setHtmlContent(sanitizeEpubHtml(res.content.content));
         setNextSpineIdx(res.content.spine_idx);
         setNextCharOffset(res.content.next_char_offset);
         setPageSize(res.content.page_size);
@@ -530,16 +541,23 @@ export function ReadingView({ book, onBack }: ReadingViewProps) {
   const hasNext = nextSpineIdx < spineItems.length;
   const hasPrev = charOffset > 0 || currentSpineIdx > 0;
 
-  // Show wrapped HTML when: active inline SR, idle with saved position, or entry mode active
+  // Show wrapped HTML when SR is active (any mode), idle with saved position,
+  // or entry mode is active. Keeping the clean, script-free wrapped HTML in the
+  // iframe during focus SR prevents it from reverting to htmlContent (which has
+  // script tags that are blocked by the sandbox and cause spurious errors).
   const showSrHtml =
-    (srState !== 'idle' && srMode === 'inline') ||
+    (srState !== 'idle' && srWrappedHtml !== '') ||
     (srState === 'idle' && srWordIdx > 0 && srWrappedHtml !== '') ||
     (srEntryMode !== false && srWrappedHtml !== '');
 
-  const displayHtml      = showSrHtml ? srWrappedHtml : htmlContent;
-  const inlineSrWordIdx  = showSrHtml ? srWordIdx     : undefined;
-
+  const displayHtml = showSrHtml ? srWrappedHtml : htmlContent;
   const showFocusOverlay = srMode === 'focus' && srState !== 'idle';
+
+  // During active focus SR, only track the word in the background when mode is 'tracking'.
+  // In 'static' and 'opaque' the highlight stays fixed (or hidden behind a solid bg).
+  const inlineSrWordIdx = showSrHtml
+    ? (showFocusOverlay && focusBackgroundMode !== 'tracking' ? undefined : srWordIdx)
+    : undefined;
 
   return (
     <div className="flex flex-col h-full bg-[#fefcf9] text-fg-primary font-sans antialiased">
@@ -603,6 +621,7 @@ export function ReadingView({ book, onBack }: ReadingViewProps) {
               wpm={srWpm}
               focusFontSize={srFocusFontSize}
               focusWordColor={focusWordColor}
+              backgroundMode={focusBackgroundMode}
               onFontSizeIncrease={increaseFocusFontSize}
               onFontSizeDecrease={decreaseFocusFontSize}
               onStart={handleBeginSR}
@@ -628,6 +647,8 @@ export function ReadingView({ book, onBack }: ReadingViewProps) {
           onInlineHighlightColorChange={setSrHighlightColor}
           focusWordColor={focusWordColor}
           onFocusWordColorChange={setFocusWordColor}
+          focusBackgroundMode={focusBackgroundMode}
+          onFocusBackgroundModeChange={setFocusBackgroundMode}
         />
       </div>
 

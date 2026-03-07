@@ -9,6 +9,12 @@ interface FocusOverlayProps {
   focusFontSize: number;
   /** Fill colour of the displayed word (default: black). */
   focusWordColor?: string;
+  /**
+   * 'static'   — book blurred behind, highlight does not track (default)
+   * 'tracking' — book blurred behind, highlight follows current word
+   * 'opaque'   — solid dark background, no book visible
+   */
+  backgroundMode?: 'static' | 'tracking' | 'opaque';
   onFontSizeIncrease: () => void;
   onFontSizeDecrease: () => void;
   /** Called from the ready state when the user clicks Start Reading. */
@@ -40,6 +46,7 @@ export function FocusOverlay({
   wpm,
   focusFontSize,
   focusWordColor = '#000000',
+  backgroundMode = 'tracking',
   onFontSizeIncrease,
   onFontSizeDecrease,
   onStart,
@@ -50,7 +57,7 @@ export function FocusOverlay({
   const progress = wordCount > 0 ? (wordIdx + 1) / wordCount : 0;
 
   return (
-    <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/55 backdrop-blur-[3px]">
+    <div className={`absolute inset-0 z-20 flex flex-col items-center justify-center ${backgroundMode === 'opaque' ? 'bg-[#1a1a1a]' : 'bg-black/55 backdrop-blur-[3px]'}`}>
 
       {/* ── Glassmorphism card ───────────────────────────── */}
       <div className="rounded-2xl bg-white/20 backdrop-blur border border-white/30 shadow-2xl px-10 py-8 flex flex-col items-center gap-6 w-[min(480px,65vw)]">

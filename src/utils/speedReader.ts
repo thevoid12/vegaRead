@@ -3,6 +3,28 @@ const SKIP_TAGS = new Set([
 ]);
 
 /**
+ * Strips elements and attributes that would be blocked by
+ * sandbox="allow-same-origin" (no allow-scripts) in the iframe.
+ *
+ * In WebKit/Tauri, blocked scripts/handlers fire an error that can intercept
+ * click events before they reach our addEventListener listeners. Sanitizing
+ * upfront prevents those errors from appearing during normal reading too.
+ */
+export function sanitizeEpubHtml(html: string): string {
+  return html
+    // Remove <script>…</script> blocks (case-insensitive, dotall)
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script\s*>/gi, '')
+    // Remove self-closing <script … /> tags
+    .replace(/<script\b[^>]*\/>/gi, '')
+    // Remove inline event handler attributes: on* = "…" or '…'
+    .replace(/\s+on[a-z][a-z0-9]*\s*=\s*"[^"]*"/gi, '')
+    .replace(/\s+on[a-z][a-z0-9]*\s*=\s*'[^']*'/gi, '')
+    // Remove javascript: hrefs / srcs
+    .replace(/(href|src)\s*=\s*"javascript:[^"]*"/gi, '$1=""')
+    .replace(/(href|src)\s*=\s*'javascript:[^']*'/gi, "$1=''");
+}
+
+/**
  * Walks the parsed HTML DOM and wraps every non-whitespace word in
  * <span data-sr="N"> so the parent frame can highlight them by injecting
  * a targeted CSS rule into the iframe — no inline scripts needed inside
@@ -12,7 +34,9 @@ const SKIP_TAGS = new Set([
  */
 export function wrapWordsInSpans(html: string): { html: string; wordCount: number } {
   const parser = new DOMParser();
-  const doc = parser.parseFromString(html, 'text/html');
+  // sanitizeEpubHtml is a fast string-level pass; htmlContent is already sanitized
+  // when called from ReadingView, but wrapWordsInSpans may also be called with raw html.
+  const doc = parser.parseFromString(sanitizeEpubHtml(html), 'text/html');
   let idx = 0;
 
   function walk(node: Node) {
