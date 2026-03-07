@@ -98,6 +98,19 @@ pub async fn save_sr_position_handler(
     db::update_sr_position(pool.inner(), &id, &pointer).await
 }
 
+/// Returns the persisted global reader settings, or defaults if none saved yet.
+#[tauri::command]
+pub async fn get_settings_handler(pool: State<'_, SqlitePool>) -> Result<models::AppSettings, ApplicationError> {
+    db::get_settings(pool.inner()).await
+}
+
+/// Persists global reader settings (WPM, font sizes, colors, focus mode).
+#[tauri::command]
+pub async fn save_settings_handler(req: models::SaveSettingsRequestRaw, pool: State<'_, SqlitePool>) -> Result<(), ApplicationError> {
+    let req = models::SaveSettingsRequest::validate(req)?;
+    db::update_settings(pool.inner(), &req).await
+}
+
 // core logic shared by both handlers — takes &SqlitePool directly, no State wrapper
 async fn list_all_books(pool: &SqlitePool) -> Result<Vec<models::vagaread>, ApplicationError> {
     let records = db::list_all_vb_records(pool).await?;

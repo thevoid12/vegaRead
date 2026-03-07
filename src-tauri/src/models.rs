@@ -3,6 +3,18 @@ use uuid;
 use crate::errors::{ApplicationError, codes::VALIDATION_ERROR};
 pub const PAGINATE_CHAR: usize = 10_000;
 
+pub const FOCUS_BG_STATIC:   &str = "static";
+pub const FOCUS_BG_TRACKING: &str = "tracking";
+pub const FOCUS_BG_OPAQUE:   &str = "opaque";
+
+// ── Settings JSON field name constants ───────────────────────────────────────
+pub const SETTINGS_WPM:               &str = "wpm";
+pub const SETTINGS_FONT_SIZE:         &str = "font_size";
+pub const SETTINGS_FOCUS_FONT_SIZE:   &str = "focus_font_size";
+pub const SETTINGS_INLINE_HIGHLIGHT:  &str = "inline_highlight_color";
+pub const SETTINGS_FOCUS_WORD_COLOR:  &str = "focus_word_color";
+pub const SETTINGS_FOCUS_BG_MODE:     &str = "focus_background_mode";
+
 // ── Newtype validators ───────────────────────────────────────────────────────
 
 pub struct FilePath(String);
@@ -277,6 +289,91 @@ impl Content_response {
 pub struct book_response{
     pub vagaread_id: uuid::Uuid,
     pub content: Content_response,
+}
+
+/// Response type returned by get_settings_handler.
+#[derive(serde::Serialize, serde::Deserialize)]
+pub struct AppSettings {
+    pub wpm: u32,
+    pub font_size: u32,
+    pub focus_font_size: u32,
+    pub inline_highlight_color: String,
+    pub focus_word_color: String,
+    pub focus_background_mode: String,
+}
+
+impl Default for AppSettings {
+    fn default() -> Self {
+        AppSettings {
+            wpm: 250,
+            font_size: 18,
+            focus_font_size: 72,
+            inline_highlight_color: "#fbbf24".to_string(),
+            focus_word_color: "#000000".to_string(),
+            focus_background_mode: "tracking".to_string(),
+        }
+    }
+}
+
+// ── Save settings request ─────────────────────────────────────────────────────
+
+#[derive(serde::Deserialize)]
+pub struct SaveSettingsRequestRaw {
+    pub wpm: u32,
+    pub font_size: u32,
+    pub focus_font_size: u32,
+    pub inline_highlight_color: String,
+    pub focus_word_color: String,
+    pub focus_background_mode: String,
+}
+
+pub struct SaveSettingsRequest {
+    wpm: u32,
+    font_size: u32,
+    focus_font_size: u32,
+    inline_highlight_color: String,
+    focus_word_color: String,
+    focus_background_mode: String,
+}
+
+impl SaveSettingsRequest {
+    pub fn validate(raw: SaveSettingsRequestRaw) -> Result<Self, ApplicationError> {
+        if raw.wpm < 50 || raw.wpm > 1000 {
+            return Err(ApplicationError { code: VALIDATION_ERROR, message: Some(format!("wpm {} out of range (50–1000)", raw.wpm)) });
+        }
+        if raw.font_size < 12 || raw.font_size > 32 {
+            return Err(ApplicationError { code: VALIDATION_ERROR, message: Some(format!("font_size {} out of range (12–32)", raw.font_size)) });
+        }
+        if raw.focus_font_size < 40 || raw.focus_font_size > 120 {
+            return Err(ApplicationError { code: VALIDATION_ERROR, message: Some(format!("focus_font_size {} out of range (40–120)", raw.focus_font_size)) });
+        }
+        if !raw.inline_highlight_color.starts_with('#') || raw.inline_highlight_color.len() != 7 {
+            return Err(ApplicationError { code: VALIDATION_ERROR, message: Some("invalid inline_highlight_color".to_string()) });
+        }
+        if !raw.focus_word_color.starts_with('#') || raw.focus_word_color.len() != 7 {
+            return Err(ApplicationError { code: VALIDATION_ERROR, message: Some("invalid focus_word_color".to_string()) });
+        }
+        if raw.focus_background_mode != FOCUS_BG_STATIC
+            && raw.focus_background_mode != FOCUS_BG_TRACKING
+            && raw.focus_background_mode != FOCUS_BG_OPAQUE
+        {
+            return Err(ApplicationError { code: VALIDATION_ERROR, message: Some(format!("unknown focus_background_mode '{}'", raw.focus_background_mode)) });
+        }
+        Ok(Self {
+            wpm: raw.wpm,
+            font_size: raw.font_size,
+            focus_font_size: raw.focus_font_size,
+            inline_highlight_color: raw.inline_highlight_color,
+            focus_word_color: raw.focus_word_color,
+            focus_background_mode: raw.focus_background_mode,
+        })
+    }
+    pub fn wpm(&self) -> u32 { self.wpm }
+    pub fn font_size(&self) -> u32 { self.font_size }
+    pub fn focus_font_size(&self) -> u32 { self.focus_font_size }
+    pub fn inline_highlight_color(&self) -> &str { &self.inline_highlight_color }
+    pub fn focus_word_color(&self) -> &str { &self.focus_word_color }
+    pub fn focus_background_mode(&self) -> &str { &self.focus_background_mode }
 }
 
 #[derive(serde::Serialize)]

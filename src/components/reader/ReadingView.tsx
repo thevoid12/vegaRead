@@ -6,7 +6,7 @@ import { SpineList } from './SpineList';
 import { BookContent } from './BookContent';
 import { FocusOverlay } from './FocusOverlay';
 import { SettingsPanel } from './SettingsPanel';
-import { getBookContent, listSpine, saveReadingProgress, saveSrPosition } from '../../api/tauri';
+import { getBookContent, listSpine, saveReadingProgress, saveSrPosition, getSettings, saveSettings } from '../../api/tauri';
 import { wrapWordsInSpans, extractWords, sanitizeEpubHtml } from '../../utils/speedReader';
 import type { Book, SpineItem } from '../../types';
 
@@ -86,10 +86,44 @@ export function ReadingView({ book, onBack }: ReadingViewProps) {
   const srWrappedHtmlRef = useRef('');
 
   // ── Settings ──────────────────────────────────────────────────────────────
-  const [settingsOpen,       setSettingsOpen]       = useState(false);
-  const [srHighlightColor,   setSrHighlightColor]   = useState(SR_HIGHLIGHT_DEFAULT);
-  const [focusWordColor,     setFocusWordColor]     = useState(SR_FOCUS_COLOR_DEFAULT);
+  const [settingsOpen,        setSettingsOpen]        = useState(false);
+  const [srHighlightColor,    setSrHighlightColor]    = useState(SR_HIGHLIGHT_DEFAULT);
+  const [focusWordColor,      setFocusWordColor]      = useState(SR_FOCUS_COLOR_DEFAULT);
   const [focusBackgroundMode, setFocusBackgroundMode] = useState<'static' | 'tracking' | 'opaque'>('tracking');
+  const saveSettingsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Load persisted settings once on mount.
+  useEffect(() => {
+    getSettings().then((s) => {
+      setSrWpm(s.wpm);
+      setFontSize(s.font_size);
+      setSrFocusFontSize(s.focus_font_size);
+      setSrHighlightColor(s.inline_highlight_color);
+      setFocusWordColor(s.focus_word_color);
+      if (s.focus_background_mode === 'static' || s.focus_background_mode === 'tracking' || s.focus_background_mode === 'opaque') {
+        setFocusBackgroundMode(s.focus_background_mode);
+      }
+    }).catch(() => { /* use defaults on error */ });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Debounce-save settings to DB whenever any value changes.
+  useEffect(() => {
+    if (saveSettingsTimerRef.current) clearTimeout(saveSettingsTimerRef.current);
+    saveSettingsTimerRef.current = setTimeout(() => {
+      saveSettings({
+        wpm: srWpm,
+        font_size: fontSize,
+        focus_font_size: srFocusFontSize,
+        inline_highlight_color: srHighlightColor,
+        focus_word_color: focusWordColor,
+        focus_background_mode: focusBackgroundMode,
+      }).catch(() => {});
+    }, 500);
+    return () => {
+      if (saveSettingsTimerRef.current) clearTimeout(saveSettingsTimerRef.current);
+    };
+  }, [srWpm, fontSize, srFocusFontSize, srHighlightColor, focusWordColor, focusBackgroundMode]);
 
   // ── SR entry mode (crosshair — click a word to start SR directly in that mode) ─
   // false = inactive; 'inline' | 'focus' = waiting for user to click a word

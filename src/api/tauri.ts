@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
-import type { Book, SpineItem, BookResponse, ContentResponse } from '../types';
+import type { Book, SpineItem, BookResponse, ContentResponse, AppSettings } from '../types';
 
 /**
  * Fetches all non-deleted books from the local SQLite database.
@@ -95,4 +95,20 @@ export async function saveSrPosition(
       mode,
     },
   });
+}
+
+/**
+ * Loads persisted global reader settings from the DB.
+ * Maps to `get_settings_handler`.
+ */
+export async function getSettings(): Promise<AppSettings> {
+  return invoke<AppSettings>('get_settings_handler');
+}
+
+/**
+ * Saves global reader settings to the DB.
+ * Maps to `save_settings_handler`.
+ */
+export async function saveSettings(settings: AppSettings): Promise<void> {
+  return invoke<void>('save_settings_handler', { req: settings });
 }

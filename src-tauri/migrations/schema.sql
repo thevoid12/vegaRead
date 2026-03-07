@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS vagaread(
     current_spine TEXT NOT NULL,
     current_page TEXT NOT NULL DEFAULT '0', -- visual page within the current chunk (frontend CSS column page)
     speed_read_pointer TEXT NOT NULL DEFAULT '0:inline', -- "{word_idx}:{mode}" saved SR position within the loaded chunk
+    settings_json TEXT NOT NULL DEFAULT '{}', -- global reader settings stored in a sentinel row (id='app_settings', is_deleted=true)
     created_on TIMESTAMP NOT NULL,
     updated_on TIMESTAMP NOT NULL,
     is_deleted BOOL NOT NULL

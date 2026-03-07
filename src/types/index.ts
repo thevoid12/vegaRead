@@ -68,3 +68,13 @@ export interface BookResponse {
   vagaread_id: string;
   content: ContentResponse;
 }
+
+/** Mirrors `models::AppSettings` — global reader preferences persisted in DB. */
+export interface AppSettings {
+  wpm: number;
+  font_size: number;
+  focus_font_size: number;
+  inline_highlight_color: string;
+  focus_word_color: string;
+  focus_background_mode: 'static' | 'tracking' | 'opaque';
+}

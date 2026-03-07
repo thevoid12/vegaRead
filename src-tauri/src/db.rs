@@ -240,3 +240,41 @@ pub async fn list_all_vb_records(pool: &SqlitePool) -> Result<Vec<models::vagare
 
     Ok(records)
 }
+
+pub async fn get_settings(pool: &SqlitePool) -> Result<models::AppSettings, ApplicationError> {
+    use sqlx::Row;
+    let row = sqlx::query(crate::queries::GET_SETTINGS)
+        .fetch_optional(pool)
+        .await
+        .map_err(|e| ApplicationError {
+            code: codes::DATABASE_ERROR,
+            message: Some(format!("failed to fetch settings: {e}")),
+        })?;
+
+    if let Some(row) = row {
+        let json: &str = row.get("settings_json");
+        Ok(serde_json::from_str(json).unwrap_or_default())
+    } else {
+        Ok(models::AppSettings::default())
+    }
+}
+
+pub async fn update_settings(pool: &SqlitePool, req: &models::SaveSettingsRequest) -> Result<(), ApplicationError> {
+    let json = serde_json::json!({
+        models::SETTINGS_WPM:              req.wpm(),
+        models::SETTINGS_FONT_SIZE:        req.font_size(),
+        models::SETTINGS_FOCUS_FONT_SIZE:  req.focus_font_size(),
+        models::SETTINGS_INLINE_HIGHLIGHT: req.inline_highlight_color(),
+        models::SETTINGS_FOCUS_WORD_COLOR: req.focus_word_color(),
+        models::SETTINGS_FOCUS_BG_MODE:    req.focus_background_mode(),
+    }).to_string();
+    sqlx::query(crate::queries::UPDATE_SETTINGS)
+        .bind(json)
+        .execute(pool)
+        .await
+        .map_err(|e| ApplicationError {
+            code: codes::DATABASE_ERROR,
+            message: Some(format!("failed to update settings: {e}")),
+        })?;
+    Ok(())
+}
