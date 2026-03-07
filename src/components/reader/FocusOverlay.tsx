@@ -24,9 +24,6 @@ interface FocusOverlayProps {
   onStop: () => void;
 }
 
-const FONT_LABEL_SIZE: Record<number, string> = {};
-for (let s = 40; s <= 120; s += 8) FONT_LABEL_SIZE[s] = `${s}px`;
-
 /**
  * RSVP (Rapid Serial Visual Presentation) focus overlay.
  *

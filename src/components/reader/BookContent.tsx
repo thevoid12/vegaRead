@@ -209,10 +209,10 @@ export function BookContent({
   const onIframeClickRef    = useRef(onIframeClick);
   const onPageChangeRef     = useRef(onPageChange);
   const onSrWordClickRef    = useRef(onSrWordClick);
-  useEffect(() => { onWordRightClickRef.current = onWordRightClick;   }, [onWordRightClick]);
-  useEffect(() => { onIframeClickRef.current    = onIframeClick;      }, [onIframeClick]);
-  useEffect(() => { onPageChangeRef.current     = onPageChange;       }, [onPageChange]);
-  useEffect(() => { onSrWordClickRef.current    = onSrWordClick;      }, [onSrWordClick]);
+  onWordRightClickRef.current = onWordRightClick;
+  onIframeClickRef.current    = onIframeClick;
+  onPageChangeRef.current     = onPageChange;
+  onSrWordClickRef.current    = onSrWordClick;
 
   // Incremented on every iframe load — forces CSS injection effects to re-run
   // after a remount, since the new document is blank until the load event fires.
@@ -270,9 +270,7 @@ export function BookContent({
   const [currentPage,   setCurrentPage]   = useState(0);
   const [totalPages,    setTotalPages]    = useState(1);
 
-  // Keep currentPageRef in sync so effects that can't take currentPage as a
-  // dependency (e.g. the font-size refresh effect) always read the latest value.
-  useEffect(() => { currentPageRef.current = currentPage; }, [currentPage]);
+  currentPageRef.current = currentPage;
 
   // When initialPage prop changes, store it for use after the next refresh.
   useEffect(() => {

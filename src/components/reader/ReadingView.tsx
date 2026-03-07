@@ -41,7 +41,7 @@ interface ReadingViewProps {
  *   can adjust zoom before clicking Start. When the last word of a chunk is
  *   reached the reader auto-advances to the next chapter chunk seamlessly.
  *
- * SR position is saved to DB on: pause, stop (resets to 0), back, close,
+ * SR position is saved to DB on: pause, stop, back, close,
  * and manual chapter navigation while SR is active.
  *
  * On book open, if book.sr_word_idx > 0 the saved position is restored —
@@ -129,60 +129,30 @@ export function ReadingView({ book, onBack }: ReadingViewProps) {
   // false = inactive; 'inline' | 'focus' = waiting for user to click a word
   const [srEntryMode, setSrEntryMode] = useState<false | SrMode>(false);
   const srEntryModeRef = useRef<false | SrMode>(false);
-  useEffect(() => { srEntryModeRef.current = srEntryMode; }, [srEntryMode]);
 
   // ── Context menu (right-click a word to start SR from it) ─────────────────
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; wordIdx: number } | null>(null);
 
-  // ── Refs that the setInterval callback reads — never stale ────────────────
-  const isFirstLoadRef  = useRef(true);               // skip SR reset on initial content load
-  const srIntervalRef   = useRef<ReturnType<typeof setInterval> | null>(null);
-  const srWordIdxRef    = useRef(book.sr_word_idx);   // restored from DB or 0
-  const srWordCountRef  = useRef(0);
-  const srWpmRef        = useRef(SR_WPM_DEFAULT);
-  const srOnEndRef      = useRef<(() => void) | null>(null);
-  const srAutoRestartRef = useRef(false);
-
-  // Refs for stable reads in callbacks (avoids stale closures)
+  // ── Refs (stable reads for setInterval / event handlers / close handler) ──
+  const isFirstLoadRef    = useRef(true);               // skip SR reset on initial content load
+  const srIntervalRef     = useRef<ReturnType<typeof setInterval> | null>(null);
+  const srWordIdxRef      = useRef(book.sr_word_idx);   // restored from DB or 0
+  const srWordCountRef    = useRef(0);
+  const srWpmRef          = useRef(SR_WPM_DEFAULT);
+  const srOnEndRef        = useRef<(() => void) | null>(null);
+  const srAutoRestartRef  = useRef(false);
   const hasNextRef        = useRef(false);
   const nextSpineIdxRef   = useRef(book.current_spine);
   const nextCharOffsetRef = useRef(0);
-
-  useEffect(() => { hasNextRef.current      = nextSpineIdx < spineItems.length; },
-    [nextSpineIdx, spineItems.length]);
-  useEffect(() => { nextSpineIdxRef.current   = nextSpineIdx;   }, [nextSpineIdx]);
-  useEffect(() => { nextCharOffsetRef.current = nextCharOffset; }, [nextCharOffset]);
-
   const currentSpineIdxRef = useRef(book.current_spine);
   const charOffsetRef      = useRef(book.current_read_idx);
   const currentPageRef     = useRef(0);
+  const pageSizeRef        = useRef(0);
   const srModeRef          = useRef<SrMode>(savedSrMode);
   const srStateRef         = useRef<SrState>('idle');
-  useEffect(() => { currentSpineIdxRef.current = currentSpineIdx; }, [currentSpineIdx]);
-  useEffect(() => { charOffsetRef.current      = charOffset;      }, [charOffset]);
-  useEffect(() => { currentPageRef.current     = currentPage;     }, [currentPage]);
-  useEffect(() => { srModeRef.current          = srMode;          }, [srMode]);
-  useEffect(() => { srStateRef.current         = srState;         }, [srState]);
-  useEffect(() => { srWrappedHtmlRef.current   = srWrappedHtml;   }, [srWrappedHtml]);
 
   // Debounce timer for within-chunk page saves
   const saveProgressDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // Ref bundle for the close handler (always fresh values)
-  const closeDataRef = useRef({
-    bookId: book.vagaread_id,
-    spineIdx: book.current_spine,
-    charOffset: book.current_read_idx,
-    currentPage: 0,
-  });
-  useEffect(() => {
-    closeDataRef.current = {
-      bookId: book.vagaread_id,
-      spineIdx: currentSpineIdx,
-      charOffset,
-      currentPage,
-    };
-  }, [book.vagaread_id, currentSpineIdx, charOffset, currentPage]);
 
   // ── App close: save reading + SR progress before window closes ────────────
   useEffect(() => {
@@ -197,7 +167,10 @@ export function ReadingView({ book, onBack }: ReadingViewProps) {
         clearTimeout(saveProgressDebounceRef.current);
         saveProgressDebounceRef.current = null;
       }
-      const { bookId, spineIdx, charOffset: co, currentPage: cp } = closeDataRef.current;
+      const bookId   = book.vagaread_id;
+      const spineIdx = currentSpineIdxRef.current;
+      const co       = charOffsetRef.current;
+      const cp       = currentPageRef.current;
       try {
         // Always save reading progress; also save SR position if active
         if (srStateRef.current !== 'idle') {
@@ -334,18 +307,18 @@ export function ReadingView({ book, onBack }: ReadingViewProps) {
 
   // ── Settings handlers ─────────────────────────────────────────────────────
   const handleOpenSettings = useCallback(() => {
-    if (srState === 'running') handlePauseSR();
+    if (srStateRef.current === 'running') handlePauseSR();
     setSettingsOpen(true);
-  }, [srState, handlePauseSR]);
+  }, [handlePauseSR]);
 
   const handleWpmChange = useCallback((wpm: number) => {
     srWpmRef.current = wpm;
     setSrWpm(wpm);
-    if (srState === 'running') {
+    if (srStateRef.current === 'running') {
       clearSRTimer();
       startSRTimerFrom(srWordIdxRef.current);
     }
-  }, [srState, clearSRTimer, startSRTimerFrom]);
+  }, [clearSRTimer, startSRTimerFrom]);
 
   const increaseFocusFontSize = useCallback(
     () => setSrFocusFontSize(f => Math.min(f + SR_FOCUS_FONT_STEP, SR_FOCUS_FONT_MAX)), []);
@@ -371,7 +344,7 @@ export function ReadingView({ book, onBack }: ReadingViewProps) {
     srWordIdxRef.current = fromWordIdx;
 
     if (mode === 'inline') {
-      if (srState !== 'idle' && srMode === 'inline') {
+      if (srStateRef.current !== 'idle' && srModeRef.current === 'inline') {
         // Already in inline SR — just jump to the new position
         clearSRTimer();
         setSrState('running');
@@ -396,21 +369,21 @@ export function ReadingView({ book, onBack }: ReadingViewProps) {
       setSrReady(true);
       setSrState('paused');
     }
-  }, [htmlContent, srState, srMode, clearSRTimer, startSRTimerFrom]);
+  }, [htmlContent, clearSRTimer, startSRTimerFrom]);
 
   /**
    * Activate entry mode for the given SR mode.
    * Generates wrapped HTML immediately so data-sr spans exist in the iframe.
    */
   const handleActivateEntryMode = useCallback((mode: SrMode) => {
-    if (!srWrappedHtml && htmlContent) {
+    if (!srWrappedHtmlRef.current && htmlContent) {
       const { html, wordCount } = wrapWordsInSpans(htmlContent);
       setSrWrappedHtml(html);
       setSrWordCount(wordCount);
       srWordCountRef.current = wordCount;
     }
     setSrEntryMode(mode);
-  }, [htmlContent, srWrappedHtml]);
+  }, [htmlContent]);
 
   /**
    * Called by BookContent when user clicks a word while entry mode is active.
@@ -528,19 +501,19 @@ export function ReadingView({ book, onBack }: ReadingViewProps) {
 
   const handleNext = useCallback(() => {
     saveSrBeforeNav();
-    setCurrentSpineIdx(nextSpineIdx);
-    setCharOffset(nextCharOffset);
-  }, [nextSpineIdx, nextCharOffset, saveSrBeforeNav]);
+    setCurrentSpineIdx(nextSpineIdxRef.current);
+    setCharOffset(nextCharOffsetRef.current);
+  }, [saveSrBeforeNav]);
 
   const handlePrev = useCallback(() => {
     saveSrBeforeNav();
-    if (charOffset > 0 && pageSize > 0) {
-      setCharOffset((o) => Math.max(0, o - pageSize));
-    } else if (currentSpineIdx > 0) {
+    if (charOffsetRef.current > 0 && pageSizeRef.current > 0) {
+      setCharOffset((o) => Math.max(0, o - pageSizeRef.current));
+    } else if (currentSpineIdxRef.current > 0) {
       setCurrentSpineIdx((i) => i - 1);
       setCharOffset(0);
     }
-  }, [charOffset, currentSpineIdx, pageSize, saveSrBeforeNav]);
+  }, [saveSrBeforeNav]);
 
   // ── Back button: flush saves then navigate ────────────────────────────────
   const handleBack = useCallback(async () => {
@@ -551,17 +524,17 @@ export function ReadingView({ book, onBack }: ReadingViewProps) {
     try {
       if (srStateRef.current !== 'idle') {
         await saveSrPosition(
-          book.vagaread_id, currentSpineIdx, charOffset, currentPage,
+          book.vagaread_id, currentSpineIdxRef.current, charOffsetRef.current, currentPageRef.current,
           srWordIdxRef.current, srModeRef.current,
         );
       } else {
-        await saveReadingProgress(book.vagaread_id, currentSpineIdx, charOffset, currentPage);
+        await saveReadingProgress(book.vagaread_id, currentSpineIdxRef.current, charOffsetRef.current, currentPageRef.current);
       }
     } catch (e) {
       console.error('[back save]', e);
     }
     onBack();
-  }, [book.vagaread_id, currentSpineIdx, charOffset, currentPage, onBack]);
+  }, [book.vagaread_id, onBack]);
 
   // ── Reading font size controls ────────────────────────────────────────────
   const increaseFontSize = useCallback(
@@ -574,6 +547,19 @@ export function ReadingView({ book, onBack }: ReadingViewProps) {
 
   const hasNext = nextSpineIdx < spineItems.length;
   const hasPrev = charOffset > 0 || currentSpineIdx > 0;
+
+  // Keep refs current for async callbacks (setInterval, event handlers, window.onCloseRequested)
+  currentSpineIdxRef.current = currentSpineIdx;
+  charOffsetRef.current      = charOffset;
+  currentPageRef.current     = currentPage;
+  pageSizeRef.current        = pageSize;
+  srModeRef.current          = srMode;
+  srStateRef.current         = srState;
+  srWrappedHtmlRef.current   = srWrappedHtml;
+  hasNextRef.current         = hasNext;
+  nextSpineIdxRef.current    = nextSpineIdx;
+  nextCharOffsetRef.current  = nextCharOffset;
+  srEntryModeRef.current     = srEntryMode;
 
   // Show wrapped HTML when SR is active (any mode), idle with saved position,
   // or entry mode is active. Keeping the clean, script-free wrapped HTML in the
