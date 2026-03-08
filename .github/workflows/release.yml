@@ -6,7 +6,40 @@ on:
       - 'v*'
 
 jobs:
+  # ── Step 1: create the draft release with auto-generated changelog ────────
+  create-release:
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    outputs:
+      release_id: ${{ steps.create.outputs.id }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # full history so changelog can diff against previous tag
+
+      - name: Create draft release with auto changelog
+        id: create
+        uses: softprops/action-gh-release@v2
+        with:
+          name: vagaread ${{ github.ref_name }}
+          draft: true
+          prerelease: false
+          generate_release_notes: true   # groups commits by PR labels / lists commits
+          body: |
+            ## Downloads
+            | Platform | File |
+            |---|---|
+            | Linux | `.AppImage` (portable, any distro) or `.deb` (Debian/Ubuntu) |
+            | macOS | `.dmg` (universal — Intel + Apple Silicon) |
+            | Windows | `.msi` or `.exe` (NSIS installer) |
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ── Step 2: build on each platform and upload artifacts ──────────────────
   build:
+    needs: create-release
     permissions:
       contents: write
 
@@ -60,20 +93,10 @@ jobs:
       - name: Install frontend dependencies
         run: bun install
 
-      - name: Build and publish release
+      - name: Build and upload artifacts
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tagName: ${{ github.ref_name }}
-          releaseName: 'vagaread ${{ github.ref_name }}'
-          releaseBody: |
-            ## Downloads
-            | Platform | File |
-            |---|---|
-            | Linux | `.AppImage` (portable) or `.deb` (Debian/Ubuntu) |
-            | macOS | `.dmg` (universal — Intel + Apple Silicon) |
-            | Windows | `.msi` or `.exe` (NSIS installer) |
-          releaseDraft: true
-          prerelease: false
+          releaseId: ${{ needs.create-release.outputs.release_id }}
           args: ${{ matrix.args }}

@@ -51,3 +51,24 @@ local-release:
 # 	cargo build --release
 # 	@echo "bundle the executable"
 # 	tauri bundler
+
+
+
+# ── Remote release (all platforms via GitHub Actions) ─────────────────────────
+# Usage: make release v=1.0.0
+# Bumps version in tauri.conf.json + Cargo.toml, commits, tags, and pushes.
+# GitHub Actions picks up the tag and builds Linux/macOS/Windows in parallel.
+release:
+	@if [ -z "$(v)" ]; then \
+		echo "Usage: make release v=1.2.3"; \
+		exit 1; \
+	fi
+	@echo "Bumping version to $(v)..."
+	sed -i 's/"version": "[^"]*"/"version": "$(v)"/' src-tauri/tauri.conf.json
+	sed -i '0,/^version = "[^"]*"/s//version = "$(v)"/' src-tauri/Cargo.toml
+	git add src-tauri/tauri.conf.json src-tauri/Cargo.toml
+	git commit -m "chore: release v$(v)"
+	git tag -a "v$(v)" -m "release v$(v)"
+	git push origin main
+	git push origin "v$(v)"
+	@echo "Tag v$(v) pushed — GitHub Actions will build and publish the draft release."
