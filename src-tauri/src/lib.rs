@@ -32,6 +32,9 @@ pub fn run() {
                 let pool = db::init_db(&handle).await.expect("failed to init database");
                 handle.manage(pool);
             });
+            std::panic::set_hook(Box::new(|info| {
+                log::error!("[PANIC] {info}");
+            }));
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
