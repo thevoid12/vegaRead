@@ -3,7 +3,7 @@ name = "vagaread"
 version = "0.0.0"
 description = "Epub RSPV speed reader"
 authors = ["void"]
-edition = "2026"
+edition = "2024"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
