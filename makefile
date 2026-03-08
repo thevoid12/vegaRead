@@ -67,7 +67,7 @@ release:
 	sed -i 's/"version": "[^"]*"/"version": "$(v)"/' src-tauri/tauri.conf.json
 	sed -i '0,/^version = "[^"]*"/s//version = "$(v)"/' src-tauri/Cargo.toml
 	git add src-tauri/tauri.conf.json src-tauri/Cargo.toml
-	git commit -m "chore: release v$(v)"
+	git diff --cached --quiet || git commit -m "chore: release v$(v)"
 	git tag -a "v$(v)" -m "release v$(v)"
 	git push origin main
 	git push origin "v$(v)"
