@@ -1,12 +1,12 @@
 // everything related to database is stored here!
 
 use crate::errors::{codes, ApplicationError};
+use crate::models;
+use crate::util;
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 use sqlx::SqlitePool;
 use std::str::FromStr;
 use tauri::Manager;
-use crate::util;
-use crate::models;
 
 /// Creates the SQLite connection pool.
 /// The DB file is placed inside the Tauri app-data directory.
@@ -22,14 +22,10 @@ pub async fn init_db(app: &tauri::AppHandle) -> Result<SqlitePool, ApplicationEr
     let db_path = data_dir.join("vagaread.db");
     let is_new_db = !db_path.exists();
 
-    let options = SqliteConnectOptions::from_str(
-        db_path
-            .to_str()
-            .ok_or(ApplicationError {
-                code: codes::DATABASE_ERROR,
-                message: Some("invalid db path".into()),
-            })?,
-    )
+    let options = SqliteConnectOptions::from_str(db_path.to_str().ok_or(ApplicationError {
+        code: codes::DATABASE_ERROR,
+        message: Some("invalid db path".into()),
+    })?)
     .map_err(|e| ApplicationError {
         code: codes::DATABASE_ERROR,
         message: Some(format!("bad connect options: {e}")),
@@ -70,14 +66,21 @@ fn parse_sr_pointer(sp: &str) -> (usize, String) {
     if let Some(colon) = sp.find(':') {
         let idx = sp[..colon].parse::<usize>().unwrap_or(0);
         let mode = sp[colon + 1..].to_string();
-        let mode = if mode == "inline" || mode == "focus" { mode } else { "inline".to_string() };
+        let mode = if mode == "inline" || mode == "focus" {
+            mode
+        } else {
+            "inline".to_string()
+        };
         (idx, mode)
     } else {
         (0, "inline".to_string())
     }
 }
 
-pub async fn create_record(pool: &SqlitePool, data_model: models::vagaread) -> Result<(), ApplicationError> {
+pub async fn create_record(
+    pool: &SqlitePool,
+    data_model: models::Vagaread,
+) -> Result<(), ApplicationError> {
     let sr_pointer = format!("{}:{}", data_model.sr_word_idx, data_model.sr_mode);
     sqlx::query(crate::queries::CREATE_VB_RECORD)
         .bind(data_model.vagaread_id.to_string())
@@ -98,7 +101,10 @@ pub async fn create_record(pool: &SqlitePool, data_model: models::vagaread) -> R
     Ok(())
 }
 
-pub async fn update_vb_record(pool: &SqlitePool, data_model: models::update_vr) -> Result<(), ApplicationError> {
+pub async fn update_vb_record(
+    pool: &SqlitePool,
+    data_model: models::UpdateVr,
+) -> Result<(), ApplicationError> {
     sqlx::query(crate::queries::UPDATE_VB_RECORD)
         .bind(data_model.current_read_idx.to_string())
         .bind(data_model.current_spine.to_string())
@@ -114,7 +120,11 @@ pub async fn update_vb_record(pool: &SqlitePool, data_model: models::update_vr) 
     Ok(())
 }
 
-pub async fn update_sr_position(pool: &SqlitePool, id: &str, pointer: &str) -> Result<(), ApplicationError> {
+pub async fn update_sr_position(
+    pool: &SqlitePool,
+    id: &str,
+    pointer: &str,
+) -> Result<(), ApplicationError> {
     sqlx::query(crate::queries::UPDATE_SR_POSITION)
         .bind(pointer)
         .bind(id)
@@ -128,7 +138,10 @@ pub async fn update_sr_position(pool: &SqlitePool, id: &str, pointer: &str) -> R
     Ok(())
 }
 
-pub async fn get_vb_record_by_id(pool: &SqlitePool, id: String) -> Result<models::vagaread, ApplicationError> {
+pub async fn get_vb_record_by_id(
+    pool: &SqlitePool,
+    id: String,
+) -> Result<models::Vagaread, ApplicationError> {
     use sqlx::Row;
 
     let row = sqlx::query(crate::queries::GET_VB_RECORD_BY_ID)
@@ -140,36 +153,40 @@ pub async fn get_vb_record_by_id(pool: &SqlitePool, id: String) -> Result<models
             message: Some(format!("failed to get record: {e}")),
         })?;
 
-    let vagaread_id = uuid::Uuid::parse_str(row.get::<&str, _>("id"))
-        .map_err(|e| ApplicationError {
+    let vagaread_id =
+        uuid::Uuid::parse_str(row.get::<&str, _>("id")).map_err(|e| ApplicationError {
             code: codes::DATABASE_ERROR,
             message: Some(format!("invalid uuid in db: {e}")),
         })?;
-    let current_read_idx = row.get::<&str, _>("current_read_idx")
+    let current_read_idx = row
+        .get::<&str, _>("current_read_idx")
         .parse::<usize>()
         .map_err(|e| ApplicationError {
             code: codes::DATABASE_ERROR,
             message: Some(format!("invalid current_read_idx in db: {e}")),
         })?;
-    let current_spine = row.get::<&str, _>("current_spine")
+    let current_spine = row
+        .get::<&str, _>("current_spine")
         .parse::<usize>()
         .map_err(|e| ApplicationError {
             code: codes::DATABASE_ERROR,
             message: Some(format!("invalid current_spine in db: {e}")),
         })?;
-    let current_page = row.get::<&str, _>("current_page")
+    let current_page = row
+        .get::<&str, _>("current_page")
         .parse::<usize>()
         .unwrap_or(0);
     let (sr_word_idx, sr_mode) = parse_sr_pointer(
-        row.try_get::<&str, _>("speed_read_pointer").unwrap_or("0:inline")
+        row.try_get::<&str, _>("speed_read_pointer")
+            .unwrap_or("0:inline"),
     );
-    let meta: serde_json::Value = serde_json::from_str(row.get::<&str, _>("meta_data"))
-        .map_err(|e| ApplicationError {
+    let meta: serde_json::Value =
+        serde_json::from_str(row.get::<&str, _>("meta_data")).map_err(|e| ApplicationError {
             code: codes::DATABASE_ERROR,
             message: Some(format!("invalid metadata json in db: {e}")),
         })?;
 
-    Ok(models::vagaread {
+    Ok(models::Vagaread {
         vagaread_id,
         internal_fp: row.get("internal_book_path"),
         meta_data: meta,
@@ -182,7 +199,9 @@ pub async fn get_vb_record_by_id(pool: &SqlitePool, id: String) -> Result<models
     })
 }
 
-pub async fn list_all_vb_records(pool: &SqlitePool) -> Result<Vec<models::vagaread>, ApplicationError> {
+pub async fn list_all_vb_records(
+    pool: &SqlitePool,
+) -> Result<Vec<models::Vagaread>, ApplicationError> {
     use sqlx::Row;
 
     let rows = sqlx::query(crate::queries::LIST_ALL_RECORD)
@@ -195,36 +214,40 @@ pub async fn list_all_vb_records(pool: &SqlitePool) -> Result<Vec<models::vagare
 
     let records = rows
         .iter()
-        .map(|row| -> Result<models::vagaread, ApplicationError> {
-            let vagaread_id = uuid::Uuid::parse_str(row.get::<&str, _>("id"))
-                .map_err(|e| ApplicationError {
+        .map(|row| -> Result<models::Vagaread, ApplicationError> {
+            let vagaread_id =
+                uuid::Uuid::parse_str(row.get::<&str, _>("id")).map_err(|e| ApplicationError {
                     code: codes::DATABASE_ERROR,
                     message: Some(format!("invalid uuid in db: {e}")),
                 })?;
-            let current_read_idx = row.get::<&str, _>("current_read_idx")
+            let current_read_idx = row
+                .get::<&str, _>("current_read_idx")
                 .parse::<usize>()
                 .map_err(|e| ApplicationError {
                     code: codes::DATABASE_ERROR,
                     message: Some(format!("invalid current_read_idx in db: {e}")),
                 })?;
-            let current_spine = row.get::<&str, _>("current_spine")
+            let current_spine = row
+                .get::<&str, _>("current_spine")
                 .parse::<usize>()
                 .map_err(|e| ApplicationError {
                     code: codes::DATABASE_ERROR,
                     message: Some(format!("invalid current_spine in db: {e}")),
                 })?;
-            let current_page = row.get::<&str, _>("current_page")
+            let current_page = row
+                .get::<&str, _>("current_page")
                 .parse::<usize>()
                 .unwrap_or(0);
             let (sr_word_idx, sr_mode) = parse_sr_pointer(
-                row.try_get::<&str, _>("speed_read_pointer").unwrap_or("0:inline")
+                row.try_get::<&str, _>("speed_read_pointer")
+                    .unwrap_or("0:inline"),
             );
             let meta: serde_json::Value = serde_json::from_str(row.get::<&str, _>("meta_data"))
                 .map_err(|e| ApplicationError {
                     code: codes::DATABASE_ERROR,
                     message: Some(format!("invalid metadata json in db: {e}")),
                 })?;
-            Ok(models::vagaread {
+            Ok(models::Vagaread {
                 vagaread_id,
                 internal_fp: row.get("internal_book_path"),
                 meta_data: meta,
@@ -259,7 +282,10 @@ pub async fn get_settings(pool: &SqlitePool) -> Result<models::AppSettings, Appl
     }
 }
 
-pub async fn update_settings(pool: &SqlitePool, req: &models::SaveSettingsRequest) -> Result<(), ApplicationError> {
+pub async fn update_settings(
+    pool: &SqlitePool,
+    req: &models::SaveSettingsRequest,
+) -> Result<(), ApplicationError> {
     let json = serde_json::json!({
         models::SETTINGS_WPM:              req.wpm(),
         models::SETTINGS_FONT_SIZE:        req.font_size(),
@@ -267,7 +293,8 @@ pub async fn update_settings(pool: &SqlitePool, req: &models::SaveSettingsReques
         models::SETTINGS_INLINE_HIGHLIGHT: req.inline_highlight_color(),
         models::SETTINGS_FOCUS_WORD_COLOR: req.focus_word_color(),
         models::SETTINGS_FOCUS_BG_MODE:    req.focus_background_mode(),
-    }).to_string();
+    })
+    .to_string();
     sqlx::query(crate::queries::UPDATE_SETTINGS)
         .bind(json)
         .execute(pool)

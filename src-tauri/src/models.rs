@@ -1,19 +1,17 @@
-use uuid;
-
-use crate::errors::{ApplicationError, codes::VALIDATION_ERROR};
+use crate::errors::{codes::VALIDATION_ERROR, ApplicationError};
 pub const PAGINATE_CHAR: usize = 10_000;
 
-pub const FOCUS_BG_STATIC:   &str = "static";
+pub const FOCUS_BG_STATIC: &str = "static";
 pub const FOCUS_BG_TRACKING: &str = "tracking";
-pub const FOCUS_BG_OPAQUE:   &str = "opaque";
+pub const FOCUS_BG_OPAQUE: &str = "opaque";
 
 // ── Settings JSON field name constants ───────────────────────────────────────
-pub const SETTINGS_WPM:               &str = "wpm";
-pub const SETTINGS_FONT_SIZE:         &str = "font_size";
-pub const SETTINGS_FOCUS_FONT_SIZE:   &str = "focus_font_size";
-pub const SETTINGS_INLINE_HIGHLIGHT:  &str = "inline_highlight_color";
-pub const SETTINGS_FOCUS_WORD_COLOR:  &str = "focus_word_color";
-pub const SETTINGS_FOCUS_BG_MODE:     &str = "focus_background_mode";
+pub const SETTINGS_WPM: &str = "wpm";
+pub const SETTINGS_FONT_SIZE: &str = "font_size";
+pub const SETTINGS_FOCUS_FONT_SIZE: &str = "focus_font_size";
+pub const SETTINGS_INLINE_HIGHLIGHT: &str = "inline_highlight_color";
+pub const SETTINGS_FOCUS_WORD_COLOR: &str = "focus_word_color";
+pub const SETTINGS_FOCUS_BG_MODE: &str = "focus_background_mode";
 
 // ── Newtype validators ───────────────────────────────────────────────────────
 
@@ -22,10 +20,16 @@ pub struct FilePath(String);
 impl FilePath {
     pub fn parse(v: String) -> Result<Self, ApplicationError> {
         if v.is_empty() {
-            return Err(ApplicationError { code: VALIDATION_ERROR, message: Some("file_path must not be empty".to_string()) });
+            return Err(ApplicationError {
+                code: VALIDATION_ERROR,
+                message: Some("file_path must not be empty".to_string()),
+            });
         }
         if !v.to_lowercase().ends_with(".epub") {
-            return Err(ApplicationError { code: VALIDATION_ERROR, message: Some("file_path must point to an .epub file".to_string()) });
+            return Err(ApplicationError {
+                code: VALIDATION_ERROR,
+                message: Some("file_path must point to an .epub file".to_string()),
+            });
         }
         Ok(Self(v))
     }
@@ -39,7 +43,10 @@ pub struct SpineIndex(usize);
 impl SpineIndex {
     pub fn parse(v: usize) -> Result<Self, ApplicationError> {
         if v > 10_000 {
-            return Err(ApplicationError { code: VALIDATION_ERROR, message: Some(format!("spine_idx {v} out of range (max 10000)")) });
+            return Err(ApplicationError {
+                code: VALIDATION_ERROR,
+                message: Some(format!("spine_idx {v} out of range (max 10000)")),
+            });
         }
         Ok(Self(v))
     }
@@ -53,7 +60,10 @@ pub struct CharOffset(usize);
 impl CharOffset {
     pub fn parse(v: usize) -> Result<Self, ApplicationError> {
         if v > 5_000_000 {
-            return Err(ApplicationError { code: VALIDATION_ERROR, message: Some(format!("char_offset {v} out of range (max 5000000)")) });
+            return Err(ApplicationError {
+                code: VALIDATION_ERROR,
+                message: Some(format!("char_offset {v} out of range (max 5000000)")),
+            });
         }
         Ok(Self(v))
     }
@@ -67,7 +77,10 @@ pub struct CurrentPage(usize);
 impl CurrentPage {
     pub fn parse(v: usize) -> Result<Self, ApplicationError> {
         if v > 100_000 {
-            return Err(ApplicationError { code: VALIDATION_ERROR, message: Some(format!("current_page {v} out of range (max 100000)")) });
+            return Err(ApplicationError {
+                code: VALIDATION_ERROR,
+                message: Some(format!("current_page {v} out of range (max 100000)")),
+            });
         }
         Ok(Self(v))
     }
@@ -92,7 +105,10 @@ pub struct SrMode(String);
 impl SrMode {
     pub fn parse(v: String) -> Result<Self, ApplicationError> {
         if v != "inline" && v != "focus" {
-            return Err(ApplicationError { code: VALIDATION_ERROR, message: Some(format!("unknown SR mode '{v}' (expected inline or focus)")) });
+            return Err(ApplicationError {
+                code: VALIDATION_ERROR,
+                message: Some(format!("unknown SR mode '{v}' (expected inline or focus)")),
+            });
         }
         Ok(Self(v))
     }
@@ -151,7 +167,9 @@ pub struct UploadFileRequest {
 
 impl UploadFileRequest {
     pub fn validate(raw: UploadFileRequestRaw) -> Result<Self, ApplicationError> {
-        Ok(Self { file_path: FilePath::parse(raw.file_path)? })
+        Ok(Self {
+            file_path: FilePath::parse(raw.file_path)?,
+        })
     }
     pub fn file_path(&self) -> &str {
         self.file_path.get()
@@ -172,9 +190,15 @@ impl GetEbookContentRequest {
             char_offset: CharOffset::parse(raw.char_offset)?,
         })
     }
-    pub fn file_id(&self) -> uuid::Uuid { self.file_id }
-    pub fn spine_idx(&self) -> usize { self.spine_idx.get() }
-    pub fn char_offset(&self) -> usize { self.char_offset.get() }
+    pub fn file_id(&self) -> uuid::Uuid {
+        self.file_id
+    }
+    pub fn spine_idx(&self) -> usize {
+        self.spine_idx.get()
+    }
+    pub fn char_offset(&self) -> usize {
+        self.char_offset.get()
+    }
 }
 
 pub struct ListSpineRequest {
@@ -183,9 +207,13 @@ pub struct ListSpineRequest {
 
 impl ListSpineRequest {
     pub fn validate(raw: ListSpineRequestRaw) -> Result<Self, ApplicationError> {
-        Ok(Self { file_id: raw.file_id })
+        Ok(Self {
+            file_id: raw.file_id,
+        })
     }
-    pub fn file_id(&self) -> uuid::Uuid { self.file_id }
+    pub fn file_id(&self) -> uuid::Uuid {
+        self.file_id
+    }
 }
 
 pub struct GetCoverImageRequest {
@@ -194,9 +222,13 @@ pub struct GetCoverImageRequest {
 
 impl GetCoverImageRequest {
     pub fn validate(raw: GetCoverImageRequestRaw) -> Result<Self, ApplicationError> {
-        Ok(Self { file_id: raw.file_id })
+        Ok(Self {
+            file_id: raw.file_id,
+        })
     }
-    pub fn file_id(&self) -> uuid::Uuid { self.file_id }
+    pub fn file_id(&self) -> uuid::Uuid {
+        self.file_id
+    }
 }
 
 pub struct SaveReadingProgressRequest {
@@ -215,10 +247,18 @@ impl SaveReadingProgressRequest {
             current_page: CurrentPage::parse(raw.current_page)?,
         })
     }
-    pub fn file_id(&self) -> uuid::Uuid { self.file_id }
-    pub fn spine_idx(&self) -> usize { self.spine_idx.get() }
-    pub fn char_offset(&self) -> usize { self.char_offset.get() }
-    pub fn current_page(&self) -> usize { self.current_page.get() }
+    pub fn file_id(&self) -> uuid::Uuid {
+        self.file_id
+    }
+    pub fn spine_idx(&self) -> usize {
+        self.spine_idx.get()
+    }
+    pub fn char_offset(&self) -> usize {
+        self.char_offset.get()
+    }
+    pub fn current_page(&self) -> usize {
+        self.current_page.get()
+    }
 }
 
 pub struct SaveSrPositionRequest {
@@ -241,31 +281,43 @@ impl SaveSrPositionRequest {
             mode: SrMode::parse(raw.mode)?,
         })
     }
-    pub fn file_id(&self) -> uuid::Uuid { self.file_id }
-    pub fn spine_idx(&self) -> usize { self.spine_idx.get() }
-    pub fn char_offset(&self) -> usize { self.char_offset.get() }
-    pub fn current_page(&self) -> usize { self.current_page.get() }
-    pub fn word_idx(&self) -> usize { self.word_idx.get() }
-    pub fn mode(&self) -> &str { self.mode.get() }
+    pub fn file_id(&self) -> uuid::Uuid {
+        self.file_id
+    }
+    pub fn spine_idx(&self) -> usize {
+        self.spine_idx.get()
+    }
+    pub fn char_offset(&self) -> usize {
+        self.char_offset.get()
+    }
+    pub fn current_page(&self) -> usize {
+        self.current_page.get()
+    }
+    pub fn word_idx(&self) -> usize {
+        self.word_idx.get()
+    }
+    pub fn mode(&self) -> &str {
+        self.mode.get()
+    }
 }
 
 // ── End request structs ──────────────────────────────────────────────────────
 
 // each book will have 1 vagaread recor
 #[derive(serde::Serialize)]
-pub struct vagaread{
+pub struct Vagaread {
     pub vagaread_id: uuid::Uuid,
     pub internal_fp: String,
     pub meta_data: serde_json::Value,
     pub current_read_idx: usize,
     pub current_spine: usize,
     pub current_page: usize,
-    pub sr_word_idx: usize,  // parsed from speed_read_pointer
-    pub sr_mode: String,     // parsed from speed_read_pointer
+    pub sr_word_idx: usize, // parsed from speed_read_pointer
+    pub sr_mode: String,    // parsed from speed_read_pointer
     pub is_deleted: bool,
 }
 
-pub struct update_vr{
+pub struct UpdateVr {
     pub vagaread_id: String, // primary key
     pub current_read_idx: usize,
     pub current_spine: usize,
@@ -273,22 +325,22 @@ pub struct update_vr{
 }
 
 #[derive(serde::Serialize)]
-pub struct Content_response {
+pub struct ContentResponse {
     pub content: String,
     pub spine_idx: usize,
-    pub next_char_offset: usize,  // pass this back on the next call to continue reading
-    pub page_size: usize,         // always Self::PAGE_SIZE — tells the frontend how far to step back on Prev
-    pub current_page: usize,      // visual page to restore to (0 when navigating, saved value when restoring)
+    pub next_char_offset: usize, // pass this back on the next call to continue reading
+    pub page_size: usize, // always Self::PAGE_SIZE — tells the frontend how far to step back on Prev
+    pub current_page: usize, // visual page to restore to (0 when navigating, saved value when restoring)
 }
 
-impl Content_response {
+impl ContentResponse {
     pub const PAGE_SIZE: usize = PAGINATE_CHAR;
 }
 
 #[derive(serde::Serialize)]
-pub struct book_response{
+pub struct BookResponse {
     pub vagaread_id: uuid::Uuid,
-    pub content: Content_response,
+    pub content: ContentResponse,
 }
 
 /// Response type returned by get_settings_handler.
@@ -339,25 +391,49 @@ pub struct SaveSettingsRequest {
 impl SaveSettingsRequest {
     pub fn validate(raw: SaveSettingsRequestRaw) -> Result<Self, ApplicationError> {
         if raw.wpm < 50 || raw.wpm > 1000 {
-            return Err(ApplicationError { code: VALIDATION_ERROR, message: Some(format!("wpm {} out of range (50–1000)", raw.wpm)) });
+            return Err(ApplicationError {
+                code: VALIDATION_ERROR,
+                message: Some(format!("wpm {} out of range (50–1000)", raw.wpm)),
+            });
         }
         if raw.font_size < 12 || raw.font_size > 32 {
-            return Err(ApplicationError { code: VALIDATION_ERROR, message: Some(format!("font_size {} out of range (12–32)", raw.font_size)) });
+            return Err(ApplicationError {
+                code: VALIDATION_ERROR,
+                message: Some(format!("font_size {} out of range (12–32)", raw.font_size)),
+            });
         }
         if raw.focus_font_size < 40 || raw.focus_font_size > 120 {
-            return Err(ApplicationError { code: VALIDATION_ERROR, message: Some(format!("focus_font_size {} out of range (40–120)", raw.focus_font_size)) });
+            return Err(ApplicationError {
+                code: VALIDATION_ERROR,
+                message: Some(format!(
+                    "focus_font_size {} out of range (40–120)",
+                    raw.focus_font_size
+                )),
+            });
         }
         if !raw.inline_highlight_color.starts_with('#') || raw.inline_highlight_color.len() != 7 {
-            return Err(ApplicationError { code: VALIDATION_ERROR, message: Some("invalid inline_highlight_color".to_string()) });
+            return Err(ApplicationError {
+                code: VALIDATION_ERROR,
+                message: Some("invalid inline_highlight_color".to_string()),
+            });
         }
         if !raw.focus_word_color.starts_with('#') || raw.focus_word_color.len() != 7 {
-            return Err(ApplicationError { code: VALIDATION_ERROR, message: Some("invalid focus_word_color".to_string()) });
+            return Err(ApplicationError {
+                code: VALIDATION_ERROR,
+                message: Some("invalid focus_word_color".to_string()),
+            });
         }
         if raw.focus_background_mode != FOCUS_BG_STATIC
             && raw.focus_background_mode != FOCUS_BG_TRACKING
             && raw.focus_background_mode != FOCUS_BG_OPAQUE
         {
-            return Err(ApplicationError { code: VALIDATION_ERROR, message: Some(format!("unknown focus_background_mode '{}'", raw.focus_background_mode)) });
+            return Err(ApplicationError {
+                code: VALIDATION_ERROR,
+                message: Some(format!(
+                    "unknown focus_background_mode '{}'",
+                    raw.focus_background_mode
+                )),
+            });
         }
         Ok(Self {
             wpm: raw.wpm,
@@ -368,16 +444,28 @@ impl SaveSettingsRequest {
             focus_background_mode: raw.focus_background_mode,
         })
     }
-    pub fn wpm(&self) -> u32 { self.wpm }
-    pub fn font_size(&self) -> u32 { self.font_size }
-    pub fn focus_font_size(&self) -> u32 { self.focus_font_size }
-    pub fn inline_highlight_color(&self) -> &str { &self.inline_highlight_color }
-    pub fn focus_word_color(&self) -> &str { &self.focus_word_color }
-    pub fn focus_background_mode(&self) -> &str { &self.focus_background_mode }
+    pub fn wpm(&self) -> u32 {
+        self.wpm
+    }
+    pub fn font_size(&self) -> u32 {
+        self.font_size
+    }
+    pub fn focus_font_size(&self) -> u32 {
+        self.focus_font_size
+    }
+    pub fn inline_highlight_color(&self) -> &str {
+        &self.inline_highlight_color
+    }
+    pub fn focus_word_color(&self) -> &str {
+        &self.focus_word_color
+    }
+    pub fn focus_background_mode(&self) -> &str {
+        &self.focus_background_mode
+    }
 }
 
 #[derive(serde::Serialize)]
-pub struct Spine_item_response {
+pub struct SpineItemResponse {
     pub idref: String,
     /// Actual file path within the EPUB (e.g. "OEBPS/Text/chapter01.xhtml"),
     /// resolved from the EPUB manifest resources map by idref.

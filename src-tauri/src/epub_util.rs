@@ -1,24 +1,30 @@
 // everything related to epub is done here!
 
-use crate::{errors::{ApplicationError, codes}, models};
+use crate::{
+    errors::{codes, ApplicationError},
+    models,
+};
+use base64::{engine::general_purpose::STANDARD, Engine as _};
 use epub::doc::EpubDoc;
 use std::collections::HashMap;
 use std::path::{Component, Path, PathBuf};
-use base64::{Engine as _, engine::general_purpose::STANDARD};
 
-pub fn extract_epub_metadata(fp: &str) ->Result<String,ApplicationError>{
-let doc = EpubDoc::new(fp).map_err(|e| ApplicationError {
-    code: codes::EPUB_ERROR,
-    message: Some(format!("reading the epub file failed{}",e)),
-})?;
+pub fn extract_epub_metadata(fp: &str) -> Result<String, ApplicationError> {
+    let doc = EpubDoc::new(fp).map_err(|e| ApplicationError {
+        code: codes::EPUB_ERROR,
+        message: Some(format!("reading the epub file failed{}", e)),
+    })?;
 
-let mut metadata_map: HashMap<String, Vec<String>> = HashMap::new();
-for item in &doc.metadata {
-    metadata_map.entry(item.property.clone()).or_default().push(item.value.clone());
-}
+    let mut metadata_map: HashMap<String, Vec<String>> = HashMap::new();
+    for item in &doc.metadata {
+        metadata_map
+            .entry(item.property.clone())
+            .or_default()
+            .push(item.value.clone());
+    }
 
-let metadata_json = serde_json::to_string_pretty(&metadata_map).unwrap();
-Ok(metadata_json)
+    let metadata_json = serde_json::to_string_pretty(&metadata_map).unwrap();
+    Ok(metadata_json)
 }
 
 /// Extracts the cover image of an EPUB as a data URI ("data:image/jpeg;base64,...").
@@ -30,28 +36,31 @@ pub fn extract_cover_as_data_uri(fp: &str) -> Result<Option<String>, Application
     })?;
 
     // Try the epub crate's official cover lookup first.
-    let cover_id = doc.get_cover_id()
+    let cover_id = doc
+        .get_cover_id()
         // Fallback: find any image resource whose manifest id or path contains "cover"
         .or_else(|| {
-            doc.resources.iter()
+            doc.resources
+                .iter()
                 .find(|(id, res)| {
-                    res.mime.starts_with("image/") && (
-                        id.to_lowercase().contains("cover") ||
-                        res.path.to_string_lossy().to_lowercase().contains("cover")
-                    )
+                    res.mime.starts_with("image/")
+                        && (id.to_lowercase().contains("cover")
+                            || res.path.to_string_lossy().to_lowercase().contains("cover"))
                 })
                 .map(|(id, _)| id.clone())
         });
 
     let Some(id) = cover_id else { return Ok(None) };
-    let Some((bytes, mime)) = doc.get_resource(&id) else { return Ok(None) };
+    let Some((bytes, mime)) = doc.get_resource(&id) else {
+        return Ok(None);
+    };
 
     let encoded = STANDARD.encode(&bytes);
     Ok(Some(format!("data:{};base64,{}", mime, encoded)))
 }
 
 // spine gives us the ordering for the epub files
-pub fn get_epub_spine(fp: &str) -> Result<Vec<crate::models::Spine_item_response>, ApplicationError> {
+pub fn get_epub_spine(fp: &str) -> Result<Vec<crate::models::SpineItemResponse>, ApplicationError> {
     let doc = EpubDoc::new(fp).map_err(|e| ApplicationError {
         code: codes::EPUB_ERROR,
         message: Some(format!("reading the epub file failed:{}", e)),
@@ -78,7 +87,7 @@ pub fn get_epub_spine(fp: &str) -> Result<Vec<crate::models::Spine_item_response
         stack.extend(nav.children);
     }
 
-    // ── Step 2: build a manifest-id → href string map ────────────────────────
+    // ── Step 2: build a manifest-id → href string map
     // doc.resources: HashMap<String, ResourceItem>  ResourceItem has .path and .mime
     let resources: HashMap<String, String> = doc
         .resources
@@ -86,38 +95,48 @@ pub fn get_epub_spine(fp: &str) -> Result<Vec<crate::models::Spine_item_response
         .map(|(id, resource)| (id.clone(), resource.path.to_string_lossy().into_owned()))
         .collect();
 
-    // ── Step 3: assemble SpineItemResponse with href and TOC title ───────────
-    Ok(doc.spine.into_iter().map(|item| {
-        let href = resources.get(&item.idref).cloned();
+    // ── Step 3: assemble SpineItemResponse with href and TOC title
+    Ok(doc
+        .spine
+        .into_iter()
+        .map(|item| {
+            let href = resources.get(&item.idref).cloned();
 
-        let title = href.as_deref().and_then(|h| {
-            let h = h.trim_start_matches('/');
-            // Try exact path match first
-            toc_map.get(h).cloned().or_else(|| {
-                // Fall back: match by filename only (handles different path prefixes)
-                let fname = h.split('/').last().unwrap_or("");
-                if fname.is_empty() { return None; }
-                toc_map
-                    .iter()
-                    .find(|(k, _)| k.split('/').last().unwrap_or("") == fname)
-                    .map(|(_, v)| v.clone())
-            })
-        });
+            let title = href.as_deref().and_then(|h| {
+                let h = h.trim_start_matches('/');
+                // Try exact path match first
+                toc_map.get(h).cloned().or_else(|| {
+                    // Fall back: match by filename only (handles different path prefixes)
+                    let fname = h.split('/').next_back().unwrap_or("");
+                    if fname.is_empty() {
+                        return None;
+                    }
+                    toc_map
+                        .iter()
+                        .find(|(k, _)| k.split('/').next_back().unwrap_or("") == fname)
+                        .map(|(_, v)| v.clone())
+                })
+            });
 
-        models::Spine_item_response {
-            idref: item.idref,
-            href,
-            title,
-            id: item.id,
-            properties: item.properties,
-            linear: item.linear,
-        }
-    }).collect())
+            models::SpineItemResponse {
+                idref: item.idref,
+                href,
+                title,
+                id: item.id,
+                properties: item.properties,
+                linear: item.linear,
+            }
+        })
+        .collect())
 }
 
-
 // position = (spine_idx, char_offset) — jump directly to the spine item, never load others
-pub fn get_paginated_content(fp: &str, mut spine_idx: usize, mut char_offset: usize, chunk_size: usize) -> Result<models::Content_response, ApplicationError> {
+pub fn get_paginated_content(
+    fp: &str,
+    mut spine_idx: usize,
+    mut char_offset: usize,
+    chunk_size: usize,
+) -> Result<models::ContentResponse, ApplicationError> {
     let mut doc = EpubDoc::new(fp).map_err(|e| ApplicationError {
         code: codes::EPUB_ERROR,
         message: Some(format!("reading the epub file failed: {}", e)),
@@ -125,26 +144,32 @@ pub fn get_paginated_content(fp: &str, mut spine_idx: usize, mut char_offset: us
 
     let id = match doc.spine.get(spine_idx) {
         Some(s) => s.idref.clone(),
-        None => return Err(ApplicationError {
-            code: codes::EPUB_ERROR,
-            message: Some(format!("spine index {} is out of bounds", spine_idx)),
-        }),
+        None => {
+            return Err(ApplicationError {
+                code: codes::EPUB_ERROR,
+                message: Some(format!("spine index {} is out of bounds", spine_idx)),
+            })
+        }
     };
 
     // Get the spine item's archive path so we can resolve relative image hrefs.
-    let spine_path = doc.resources.get(&id)
+    let spine_path = doc
+        .resources
+        .get(&id)
         .map(|r| r.path.to_string_lossy().into_owned())
         .unwrap_or_default();
 
     let content_str = match doc.get_resource_str(&id) {
         Some((c, _)) => c,
-        None => return Ok(models::Content_response {
-            content: String::new(),
-            spine_idx,
-            next_char_offset: 0,
-            page_size: models::Content_response::PAGE_SIZE,
-            current_page: 0,
-        }),
+        None => {
+            return Ok(models::ContentResponse {
+                content: String::new(),
+                spine_idx,
+                next_char_offset: 0,
+                page_size: models::ContentResponse::PAGE_SIZE,
+                current_page: 0,
+            })
+        }
     };
 
     let chars: Vec<char> = content_str.chars().collect();
@@ -178,11 +203,11 @@ pub fn get_paginated_content(fp: &str, mut spine_idx: usize, mut char_offset: us
     // Stripping happens AFTER pagination so saved char offsets stay valid.
     let content_sanitized = strip_scripts(&strip_event_handlers(&content_with_images));
 
-    Ok(models::Content_response {
+    Ok(models::ContentResponse {
         content: content_sanitized,
         spine_idx,
         next_char_offset: char_offset,
-        page_size: models::Content_response::PAGE_SIZE,
+        page_size: models::ContentResponse::PAGE_SIZE,
         current_page: 0, // overridden by the handler when restoring a saved position
     })
 }
@@ -205,9 +230,7 @@ fn inline_images_in_html(
         })
         .collect();
 
-    let spine_dir = Path::new(spine_path)
-        .parent()
-        .unwrap_or(Path::new(""));
+    let spine_dir = Path::new(spine_path).parent().unwrap_or(Path::new(""));
 
     let mut out = String::with_capacity(html.len());
     let mut rest = html;
@@ -215,7 +238,10 @@ fn inline_images_in_html(
     while let Some(img_start) = rest.find("<img") {
         // Verify this is really an <img ...> tag (next char must be whitespace, /, or >)
         let next_ch = rest[img_start + 4..].chars().next();
-        if !matches!(next_ch, Some(' ') | Some('\t') | Some('\n') | Some('\r') | Some('/') | Some('>')) {
+        if !matches!(
+            next_ch,
+            Some(' ') | Some('\t') | Some('\n') | Some('\r') | Some('/') | Some('>')
+        ) {
             out.push_str(&rest[..img_start + 4]);
             rest = &rest[img_start + 4..];
             continue;
@@ -243,13 +269,15 @@ fn rewrite_src_attr(
     path_to_id: &HashMap<PathBuf, String>,
     doc: &mut EpubDoc<impl std::io::Read + std::io::Seek>,
 ) -> String {
-    let Some(src_pos) = tag.find("src=") else { return tag.to_string() };
+    let Some(src_pos) = tag.find("src=") else {
+        return tag.to_string();
+    };
 
     let after_eq = &tag[src_pos + 4..];
     let (quote, val_start): (char, usize) = match after_eq.chars().next() {
-        Some('"')  => ('"',  1),
+        Some('"') => ('"', 1),
         Some('\'') => ('\'', 1),
-        _          => return tag.to_string(),
+        _ => return tag.to_string(),
     };
 
     let val_str = &after_eq[val_start..];
@@ -262,8 +290,12 @@ fn rewrite_src_attr(
     }
 
     let resolved = resolve_epub_path(spine_dir, Path::new(src_value));
-    let Some(id) = path_to_id.get(&resolved) else { return tag.to_string() };
-    let Some((bytes, mime)) = doc.get_resource(id) else { return tag.to_string() };
+    let Some(id) = path_to_id.get(&resolved) else {
+        return tag.to_string();
+    };
+    let Some((bytes, mime)) = doc.get_resource(id) else {
+        return tag.to_string();
+    };
 
     let encoded = STANDARD.encode(&bytes);
     let data_uri = format!("data:{};base64,{}", mime, encoded);
@@ -272,7 +304,7 @@ fn rewrite_src_attr(
     // then the new data URI, then the closing quote onward (the original value
     // is replaced but the surrounding quotes are preserved).
     let before = &tag[..src_pos + 4 + val_start]; // up to and including opening quote
-    let after  = &tag[src_pos + 4 + val_start + val_end..]; // from closing quote onward
+    let after = &tag[src_pos + 4 + val_start + val_end..]; // from closing quote onward
     format!("{}{}{}", before, data_uri, after)
 }
 
@@ -288,14 +320,17 @@ fn strip_scripts(html: &str) -> String {
     let mut pos = 0;
     loop {
         match lower[pos..].find("<script") {
-            None => { out.push_str(&html[pos..]); break; }
+            None => {
+                out.push_str(&html[pos..]);
+                break;
+            }
             Some(rel) => {
                 let start = pos + rel;
                 let kw_end = start + 7; // byte after "script"
-                // Only strip if the next byte makes this a real tag
-                // (whitespace, '>', '/', or end-of-string).
+                                        // Only strip if the next byte makes this a real tag
+                                        // (whitespace, '>', '/', or end-of-string).
                 match html.as_bytes().get(kw_end) {
-                    Some(&b) if !matches!(b, b' '|b'\t'|b'\n'|b'\r'|b'>'|b'/') => {
+                    Some(&b) if !matches!(b, b' ' | b'\t' | b'\n' | b'\r' | b'>' | b'/') => {
                         out.push_str(&html[pos..kw_end]);
                         pos = kw_end;
                         continue;
@@ -332,37 +367,45 @@ fn strip_event_handlers(html: &str) -> String {
     let mut i = 0;
     while i < hb.len() {
         // Look for a whitespace byte that could precede an on* attribute.
-        if !matches!(hb[i], b' '|b'\t'|b'\n'|b'\r') {
+        if !matches!(hb[i], b' ' | b'\t' | b'\n' | b'\r') {
             out.push(hb[i]);
             i += 1;
             continue;
         }
         // After whitespace, check for "on" + alpha.
         let j = i + 1;
-        if j + 2 < hb.len()
-            && lb[j]   == b'o'
-            && lb[j+1] == b'n'
-            && lb[j+2].is_ascii_alphabetic()
+        if j + 2 < hb.len() && lb[j] == b'o' && lb[j + 1] == b'n' && lb[j + 2].is_ascii_alphabetic()
         {
             // Scan to end of attribute name (alphanumeric).
             let mut k = j;
-            while k < hb.len() && lb[k].is_ascii_alphanumeric() { k += 1; }
+            while k < hb.len() && lb[k].is_ascii_alphanumeric() {
+                k += 1;
+            }
             // Skip optional whitespace before '='.
             let mut m = k;
-            while m < hb.len() && matches!(hb[m], b' '|b'\t') { m += 1; }
+            while m < hb.len() && matches!(hb[m], b' ' | b'\t') {
+                m += 1;
+            }
             if m < hb.len() && hb[m] == b'=' {
                 m += 1; // skip '='
-                while m < hb.len() && matches!(hb[m], b' '|b'\t') { m += 1; }
+                while m < hb.len() && matches!(hb[m], b' ' | b'\t') {
+                    m += 1;
+                }
                 // Skip the attribute value.
                 if m < hb.len() {
                     let q = hb[m];
                     if q == b'"' || q == b'\'' {
                         m += 1; // skip opening quote
-                        while m < hb.len() && hb[m] != q { m += 1; }
-                        if m < hb.len() { m += 1; } // skip closing quote
+                        while m < hb.len() && hb[m] != q {
+                            m += 1;
+                        }
+                        if m < hb.len() {
+                            m += 1;
+                        } // skip closing quote
                     } else {
                         // Unquoted value: scan to whitespace or '>'.
-                        while m < hb.len() && !matches!(hb[m], b' '|b'\t'|b'>'|b'\n'|b'\r') {
+                        while m < hb.len() && !matches!(hb[m], b' ' | b'\t' | b'>' | b'\n' | b'\r')
+                        {
                             m += 1;
                         }
                     }
@@ -386,9 +429,11 @@ fn resolve_epub_path(base_dir: &Path, relative: &Path) -> PathBuf {
     let mut out = PathBuf::new();
     for component in joined.components() {
         match component {
-            Component::ParentDir => { out.pop(); }
-            Component::CurDir    => {}
-            c                    => out.push(c),
+            Component::ParentDir => {
+                out.pop();
+            }
+            Component::CurDir => {}
+            c => out.push(c),
         }
     }
     out

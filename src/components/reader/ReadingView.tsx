@@ -8,6 +8,7 @@ import { FocusOverlay } from './FocusOverlay';
 import { SettingsPanel } from './SettingsPanel';
 import { getBookContent, listSpine, saveReadingProgress, saveSrPosition, getSettings, saveSettings } from '../../api/tauri';
 import { wrapWordsInSpans, extractWords, sanitizeEpubHtml } from '../../utils/speedReader';
+import { ErrorToast } from '../ui/ErrorToast';
 import type { Book, SpineItem } from '../../types';
 
 const FONT_SIZE_MIN     = 12;
@@ -50,6 +51,7 @@ interface ReadingViewProps {
  */
 export function ReadingView({ book, onBack }: ReadingViewProps) {
   // ── Reading state ─────────────────────────────────────────────────────────
+  const [toastError,       setToastError]       = useState<string | null>(null);
   const [spineItems,       setSpineItems]       = useState<SpineItem[]>([]);
   const [isLoadingSpine,   setIsLoadingSpine]   = useState(true);
   const [currentSpineIdx,  setCurrentSpineIdx]  = useState(book.current_spine);
@@ -450,7 +452,7 @@ export function ReadingView({ book, onBack }: ReadingViewProps) {
     setIsLoadingSpine(true);
     listSpine(book.vagaread_id)
       .then(setSpineItems)
-      .catch(console.error)
+      .catch(() => setToastError('Failed to load chapter list. Try reopening the book.'))
       .finally(() => setIsLoadingSpine(false));
   }, [book.vagaread_id]);
 
@@ -465,7 +467,7 @@ export function ReadingView({ book, onBack }: ReadingViewProps) {
         setPageSize(res.content.page_size);
         setInitialPage(res.content.current_page);
       })
-      .catch(console.error)
+      .catch(() => setToastError('Failed to load chapter content. Try navigating to another chapter.'))
       .finally(() => setIsLoadingContent(false));
   }, [book.vagaread_id, currentSpineIdx, charOffset]);
 
@@ -702,6 +704,10 @@ export function ReadingView({ book, onBack }: ReadingViewProps) {
             </button>
           </div>
         </div>
+      )}
+
+      {toastError && (
+        <ErrorToast message={toastError} onDismiss={() => setToastError(null)} />
       )}
     </div>
   );

@@ -15,5 +15,5 @@ pub mod codes {
     /// Epub related errors
     pub const EPUB_ERROR: u8 = 3;
     /// Input Validation errors
-    pub const VALIDATION_ERROR:u8=4;    
+    pub const VALIDATION_ERROR: u8 = 4;
 }
