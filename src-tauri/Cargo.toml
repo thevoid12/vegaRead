@@ -1,9 +1,9 @@
 [package]
 name = "vagaread"
 version = "0.1.0"
-description = "A Tauri App"
-authors = ["you"]
-edition = "2021"
+description = "Epub RSPV speed reader"
+authors = ["void"]
+edition = "2026"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -29,3 +29,11 @@ sqlx = { version = "0.8", features = ["sqlite", "runtime-tokio"] }
 epub = "2.1.5"
 uuid = { version = "1", features = ["v4", "serde"] }
 base64 = "0.22"
+
+
+[profile.release]
+panic = "abort" # Strip expensive panic clean-up logic
+codegen-units = 1 # Compile crates one after another so the compiler can optimize better
+lto = true # link time optimizations
+opt-level = "z" # Optimize for binary size (more aggressive than "s")
+strip = true

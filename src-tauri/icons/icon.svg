@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <!-- Background: deep navy rounded square (GNOME-style app icon shape) -->
+  <rect width="1024" height="1024" rx="220" fill="#1a2f50"/>
+
+  <!-- Subtle radial glow behind book -->
+  <radialGradient id="glow" cx="50%" cy="50%" r="45%">
+    <stop offset="0%" stop-color="#3584e4" stop-opacity="0.3"/>
+    <stop offset="100%" stop-color="#1a2f50" stop-opacity="0"/>
+  </radialGradient>
+  <rect width="1024" height="1024" rx="220" fill="url(#glow)"/>
+
+  <!-- Left page -->
+  <rect x="172" y="272" width="296" height="420" rx="10" fill="#f0eeec"/>
+  <!-- Left page inner shadow on right edge (spine side) -->
+  <rect x="440" y="272" width="28" height="420" rx="0" fill="#deddda"/>
+
+  <!-- Right page -->
+  <rect x="556" y="272" width="296" height="420" rx="10" fill="#f6f5f4"/>
+  <!-- Right page inner shadow on left edge (spine side) -->
+  <rect x="556" y="272" width="28" height="420" rx="0" fill="#e8e6e4"/>
+
+  <!-- Spine -->
+  <rect x="468" y="262" width="88" height="440" rx="6" fill="#deddda"/>
+  <rect x="496" y="262" width="32" height="440" rx="3" fill="#cccac7"/>
+
+  <!-- Left page text lines -->
+  <rect x="204" y="330" width="210" height="11" rx="5" fill="#9a9a9a" opacity="0.5"/>
+  <rect x="204" y="356" width="190" height="11" rx="5" fill="#9a9a9a" opacity="0.5"/>
+  <rect x="204" y="382" width="220" height="11" rx="5" fill="#9a9a9a" opacity="0.5"/>
+
+  <!-- Highlighted word (RSVP focal word) — amber, the app's SR highlight color -->
+  <rect x="204" y="406" width="96" height="22" rx="6" fill="#fbbf24" opacity="0.92"/>
+  <rect x="310" y="411" width="118" height="11" rx="5" fill="#9a9a9a" opacity="0.5"/>
+
+  <rect x="204" y="440" width="200" height="11" rx="5" fill="#9a9a9a" opacity="0.5"/>
+  <rect x="204" y="466" width="175" height="11" rx="5" fill="#9a9a9a" opacity="0.5"/>
+  <rect x="204" y="492" width="215" height="11" rx="5" fill="#9a9a9a" opacity="0.5"/>
+  <rect x="204" y="518" width="160" height="11" rx="5" fill="#9a9a9a" opacity="0.5"/>
+
+  <!-- Right page text lines -->
+  <rect x="588" y="330" width="225" height="11" rx="5" fill="#9a9a9a" opacity="0.4"/>
+  <rect x="588" y="356" width="200" height="11" rx="5" fill="#9a9a9a" opacity="0.4"/>
+  <rect x="588" y="382" width="215" height="11" rx="5" fill="#9a9a9a" opacity="0.4"/>
+  <rect x="588" y="408" width="190" height="11" rx="5" fill="#9a9a9a" opacity="0.4"/>
+  <rect x="588" y="434" width="220" height="11" rx="5" fill="#9a9a9a" opacity="0.4"/>
+  <rect x="588" y="460" width="180" height="11" rx="5" fill="#9a9a9a" opacity="0.4"/>
+  <rect x="588" y="486" width="205" height="11" rx="5" fill="#9a9a9a" opacity="0.4"/>
+  <rect x="588" y="512" width="145" height="11" rx="5" fill="#9a9a9a" opacity="0.4"/>
+
+  <!-- Speed indicator: accent blue "play forward" chevrons at bottom of right page -->
+  <text x="652" y="665" font-family="sans-serif" font-size="72" font-weight="bold"
+        fill="#3584e4" opacity="0.85" text-anchor="middle">▶▶</text>
+</svg>
