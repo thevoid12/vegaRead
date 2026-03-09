@@ -12,9 +12,9 @@
 
 
 - [x] upload directly drag and drop
-- [ ] single side book
-- [ ] cmd + and cmd -
-- [ ] space bar pause
+- [x] single side book
+- [x] cmd + and cmd -
+- [x] space bar pause
 - [ ] hanging while zooming in inline mode 
 - [x] persistant in library
 - [ ] delete book
