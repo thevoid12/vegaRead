@@ -77,4 +77,5 @@ export interface AppSettings {
   inline_highlight_color: string;
   focus_word_color: string;
   focus_background_mode: 'static' | 'tracking' | 'opaque';
+  page_mode: 'single' | 'double';
 }

@@ -70,6 +70,7 @@ export function ReadingView({ book, onBack }: ReadingViewProps) {
   const [srHighlightColor,    setSrHighlightColor]    = useState(SR_HIGHLIGHT_DEFAULT);
   const [focusWordColor,      setFocusWordColor]      = useState(SR_FOCUS_COLOR_DEFAULT);
   const [focusBackgroundMode, setFocusBackgroundMode] = useState<'static' | 'tracking' | 'opaque'>('tracking');
+  const [pageMode,            setPageMode]            = useState<'single' | 'double'>('double');
   const saveSettingsTimerRef  = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingSettingsRef    = useRef<AppSettings | null>(null);
 
@@ -84,6 +85,9 @@ export function ReadingView({ book, onBack }: ReadingViewProps) {
       if (s.focus_background_mode === 'static' || s.focus_background_mode === 'tracking' || s.focus_background_mode === 'opaque') {
         setFocusBackgroundMode(s.focus_background_mode);
       }
+      if (s.page_mode === 'single' || s.page_mode === 'double') {
+        setPageMode(s.page_mode);
+      }
     }).catch(() => { /* use defaults on error */ });
   }, []);
 
@@ -95,6 +99,7 @@ export function ReadingView({ book, onBack }: ReadingViewProps) {
       inline_highlight_color: srHighlightColor,
       focus_word_color: focusWordColor,
       focus_background_mode: focusBackgroundMode,
+      page_mode: pageMode,
     };
     pendingSettingsRef.current = s;
     if (saveSettingsTimerRef.current) clearTimeout(saveSettingsTimerRef.current);
@@ -105,7 +110,7 @@ export function ReadingView({ book, onBack }: ReadingViewProps) {
     return () => {
       if (saveSettingsTimerRef.current) clearTimeout(saveSettingsTimerRef.current);
     };
-  }, [srWpm, fontSize, srFocusFontSize, srHighlightColor, focusWordColor, focusBackgroundMode]);
+  }, [srWpm, fontSize, srFocusFontSize, srHighlightColor, focusWordColor, focusBackgroundMode, pageMode]);
 
   const [srEntryMode, setSrEntryMode] = useState<false | SrMode>(false);
   const srEntryModeRef = useRef<false | SrMode>(false);
@@ -500,6 +505,36 @@ export function ReadingView({ book, onBack }: ReadingViewProps) {
   const decreaseFontSize = useCallback(
     () => setFontSize((f) => Math.max(f - FONT_SIZE_STEP, FONT_SIZE_MIN)), []);
 
+  // ── Keyboard shortcuts ────────────────────────────────────────────────────
+  const handleKeyDown = useCallback((e: KeyboardEvent) => {
+    const isMod = e.metaKey || e.ctrlKey; // Cmd on macOS, Ctrl on Linux/Windows
+    if (isMod && (e.key === '=' || e.key === '+')) {
+      e.preventDefault();
+      setFontSize((f) => Math.min(f + FONT_SIZE_STEP, FONT_SIZE_MAX));
+      return;
+    }
+    if (isMod && e.key === '-') {
+      e.preventDefault();
+      setFontSize((f) => Math.max(f - FONT_SIZE_STEP, FONT_SIZE_MIN));
+      return;
+    }
+    if (e.key === ' ' && !e.metaKey && !e.ctrlKey && !e.altKey) {
+      const state = srStateRef.current;
+      if (state === 'running') {
+        e.preventDefault();
+        handlePauseSR();
+      } else if (state === 'paused') {
+        e.preventDefault();
+        handleResumeSR();
+      }
+    }
+  }, [handlePauseSR, handleResumeSR]);
+
+  useEffect(() => {
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleKeyDown]);
+
   const title  = book.meta_data.title?.[0]   ?? 'Untitled';
   const author = book.meta_data.creator?.[0] ?? '';
 
@@ -579,6 +614,8 @@ export function ReadingView({ book, onBack }: ReadingViewProps) {
             onPageChange={handlePageChange}
             srEntryMode={srEntryMode}
             onSrWordClick={handleSrWordClick}
+            pageMode={pageMode}
+            onKeyDown={handleKeyDown}
           />
 
           {showFocusOverlay && (
@@ -619,6 +656,8 @@ export function ReadingView({ book, onBack }: ReadingViewProps) {
           onFocusWordColorChange={setFocusWordColor}
           focusBackgroundMode={focusBackgroundMode}
           onFocusBackgroundModeChange={setFocusBackgroundMode}
+          pageMode={pageMode}
+          onPageModeChange={setPageMode}
         />
       </div>
 

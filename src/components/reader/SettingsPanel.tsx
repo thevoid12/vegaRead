@@ -22,6 +22,8 @@ interface SettingsPanelProps {
   onFocusWordColorChange: (color: string) => void;
   focusBackgroundMode: 'static' | 'tracking' | 'opaque';
   onFocusBackgroundModeChange: (mode: 'static' | 'tracking' | 'opaque') => void;
+  pageMode: 'single' | 'double';
+  onPageModeChange: (mode: 'single' | 'double') => void;
 }
 
 /**
@@ -46,6 +48,8 @@ export function SettingsPanel({
   onFocusWordColorChange,
   focusBackgroundMode,
   onFocusBackgroundModeChange,
+  pageMode,
+  onPageModeChange,
 }: SettingsPanelProps) {
   return (
     <>
@@ -157,6 +161,27 @@ export function SettingsPanel({
                 A+
               </button>
             </div>
+          </section>
+
+          <div className="h-px bg-app-border" />
+
+          <section className="flex flex-col gap-2">
+            <span className="text-[11px] font-semibold text-fg-secondary uppercase tracking-wider">Page Layout</span>
+            <div className="flex rounded-lg overflow-hidden border border-app-border text-xs font-medium">
+              {(['single', 'double'] as const).map((mode, i) => (
+                <button
+                  key={mode}
+                  type="button"
+                  onClick={() => onPageModeChange(mode)}
+                  className={`flex-1 py-1.5 transition-colors select-none ${i > 0 ? 'border-l border-app-border' : ''} ${pageMode === mode ? 'bg-accent text-white' : 'text-fg-secondary hover:bg-app-hover'}`}
+                >
+                  {mode === 'single' ? 'Single' : 'Double'}
+                </button>
+              ))}
+            </div>
+            <span className="text-[11px] text-fg-muted">
+              {pageMode === 'single' ? 'One page at a time' : 'Two pages side-by-side on wide screens'}
+            </span>
           </section>
 
           <div className="h-px bg-app-border" />

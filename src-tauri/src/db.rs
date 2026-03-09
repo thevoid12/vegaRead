@@ -308,6 +308,7 @@ pub async fn update_settings(
         models::SETTINGS_INLINE_HIGHLIGHT: req.inline_highlight_color(),
         models::SETTINGS_FOCUS_WORD_COLOR: req.focus_word_color(),
         models::SETTINGS_FOCUS_BG_MODE:    req.focus_background_mode(),
+        models::SETTINGS_PAGE_MODE:        req.page_mode(),
     })
     .to_string();
     sqlx::query(crate::queries::UPDATE_SETTINGS)

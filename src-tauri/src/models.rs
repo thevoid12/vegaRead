@@ -12,6 +12,9 @@ pub const SETTINGS_FOCUS_FONT_SIZE: &str = "focus_font_size";
 pub const SETTINGS_INLINE_HIGHLIGHT: &str = "inline_highlight_color";
 pub const SETTINGS_FOCUS_WORD_COLOR: &str = "focus_word_color";
 pub const SETTINGS_FOCUS_BG_MODE: &str = "focus_background_mode";
+pub const SETTINGS_PAGE_MODE: &str = "page_mode";
+pub const PAGE_MODE_SINGLE: &str = "single";
+pub const PAGE_MODE_DOUBLE: &str = "double";
 
 // ── Newtype validators ───────────────────────────────────────────────────────
 
@@ -343,6 +346,8 @@ pub struct BookResponse {
     pub content: ContentResponse,
 }
 
+fn default_page_mode() -> String { PAGE_MODE_DOUBLE.to_string() }
+
 /// Response type returned by get_settings_handler.
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct AppSettings {
@@ -352,6 +357,8 @@ pub struct AppSettings {
     pub inline_highlight_color: String,
     pub focus_word_color: String,
     pub focus_background_mode: String,
+    #[serde(default = "default_page_mode")]
+    pub page_mode: String,
 }
 
 impl Default for AppSettings {
@@ -363,6 +370,7 @@ impl Default for AppSettings {
             inline_highlight_color: "#fbbf24".to_string(),
             focus_word_color: "#000000".to_string(),
             focus_background_mode: "tracking".to_string(),
+            page_mode: PAGE_MODE_DOUBLE.to_string(),
         }
     }
 }
@@ -377,6 +385,7 @@ pub struct SaveSettingsRequestRaw {
     pub inline_highlight_color: String,
     pub focus_word_color: String,
     pub focus_background_mode: String,
+    pub page_mode: String,
 }
 
 pub struct SaveSettingsRequest {
@@ -386,6 +395,7 @@ pub struct SaveSettingsRequest {
     inline_highlight_color: String,
     focus_word_color: String,
     focus_background_mode: String,
+    page_mode: String,
 }
 
 impl SaveSettingsRequest {
@@ -435,6 +445,12 @@ impl SaveSettingsRequest {
                 )),
             });
         }
+        if raw.page_mode != PAGE_MODE_SINGLE && raw.page_mode != PAGE_MODE_DOUBLE {
+            return Err(ApplicationError {
+                code: VALIDATION_ERROR,
+                message: Some(format!("unknown page_mode '{}'", raw.page_mode)),
+            });
+        }
         Ok(Self {
             wpm: raw.wpm,
             font_size: raw.font_size,
@@ -442,6 +458,7 @@ impl SaveSettingsRequest {
             inline_highlight_color: raw.inline_highlight_color,
             focus_word_color: raw.focus_word_color,
             focus_background_mode: raw.focus_background_mode,
+            page_mode: raw.page_mode,
         })
     }
     pub fn wpm(&self) -> u32 {
@@ -461,6 +478,9 @@ impl SaveSettingsRequest {
     }
     pub fn focus_background_mode(&self) -> &str {
         &self.focus_background_mode
+    }
+    pub fn page_mode(&self) -> &str {
+        &self.page_mode
     }
 }
 
