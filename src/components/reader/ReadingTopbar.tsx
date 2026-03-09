@@ -18,23 +18,11 @@ interface ReadingTopbarProps {
   onResumeSR: () => void;
   onStopSR: () => void;
   onOpenSettings: () => void;
-  /**
-   * false = inactive
-   * 'inline' | 'focus' = waiting for user to click a word in the iframe
-   */
   srEntryMode: false | SrMode;
   onActivateEntryMode: (mode: SrMode) => void;
   onCancelEntryMode: () => void;
 }
 
-/**
- * Topbar shown while reading a book.
- *
- * Right section — three states:
- *   idle       → font controls + [▶ Inline] [⊕] [▶ Focus] [⊕] + settings
- *   entry mode → "Inline/Focus — click any word to start" + Cancel
- *   sr active  → word counter · Pause/Resume · Stop · settings
- */
 export function ReadingTopbar({
   bookTitle,
   author,
@@ -60,7 +48,6 @@ export function ReadingTopbar({
   return (
     <header className="flex items-center gap-3 px-3 py-2 bg-app-surface border-b border-app-border shrink-0">
 
-      {/* ── Back button ───────────────────────────────────── */}
       <button
         type="button"
         onClick={onBack}
@@ -79,7 +66,6 @@ export function ReadingTopbar({
         Library
       </button>
 
-      {/* ── Title (centre, fills available space) ─────────── */}
       <div className="flex flex-col min-w-0 flex-1 text-center">
         <span className="text-fg-primary text-sm font-semibold leading-tight truncate">
           {bookTitle}
@@ -89,19 +75,15 @@ export function ReadingTopbar({
         )}
       </div>
 
-      {/* ── Right controls ────────────────────────────────── */}
       <div className="shrink-0 flex items-center gap-1">
 
         {srActive ? (
-          /* ── Speed-reader active controls ── */
           <>
-            {/* Word counter */}
             <span className="text-fg-muted text-[11px] tabular-nums select-none px-1">
               {srWordIdx + 1}&thinsp;/&thinsp;{srWordCount}
               &ensp;&middot;&ensp;{srWpm}&thinsp;wpm
             </span>
 
-            {/* Pause / Resume */}
             <button
               type="button"
               onClick={srState === 'running' ? onPauseSR : onResumeSR}
@@ -131,7 +113,6 @@ export function ReadingTopbar({
               )}
             </button>
 
-            {/* Stop */}
             <button
               type="button"
               onClick={onStopSR}
@@ -149,7 +130,6 @@ export function ReadingTopbar({
               Stop
             </button>
 
-            {/* Settings */}
             <button
               type="button"
               onClick={onOpenSettings}
@@ -169,7 +149,6 @@ export function ReadingTopbar({
           </>
 
         ) : srEntryMode !== false ? (
-          /* ── Entry mode: waiting for user to click a word ── */
           <>
             <span className="text-fg-secondary text-xs select-none">
               <span className="font-semibold text-fg-primary capitalize">{srEntryMode}</span>
@@ -195,9 +174,7 @@ export function ReadingTopbar({
           </>
 
         ) : (
-          /* ── Idle: font controls + start buttons + entry mode ── */
           <>
-            {/* Font size controls */}
             <div className="flex items-center gap-0.5 bg-app-bg rounded-md border border-app-border px-1 py-0.5">
               <button
                 type="button"
@@ -226,7 +203,6 @@ export function ReadingTopbar({
               </button>
             </div>
 
-            {/* Inline speed-read group: start + pick word */}
             <div className="flex items-center ml-1 rounded-md overflow-hidden border border-app-border">
               <button
                 type="button"
@@ -263,7 +239,6 @@ export function ReadingTopbar({
               </button>
             </div>
 
-            {/* Focus (RSVP) speed-read group: start + pick word */}
             <div className="flex items-center rounded-md overflow-hidden border border-accent">
               <button
                 type="button"
@@ -300,7 +275,6 @@ export function ReadingTopbar({
               </button>
             </div>
 
-            {/* Settings */}
             <button
               type="button"
               onClick={onOpenSettings}

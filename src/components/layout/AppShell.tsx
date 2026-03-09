@@ -8,9 +8,7 @@ interface AppShellProps {
 export function AppShell({ onOpenImport, children }: AppShellProps) {
   return (
     <div className="flex flex-col h-full bg-app-bg text-fg-primary font-sans antialiased">
-      {/* ── Headerbar ─────────────────────────────────────────────── */}
       <header className="flex items-center justify-between px-4 py-2.5 bg-app-surface border-b border-app-border shrink-0">
-        {/* Branding */}
         <div className="flex items-center gap-2">
           <svg
             className="w-5 h-5 text-accent"
@@ -24,8 +22,6 @@ export function AppShell({ onOpenImport, children }: AppShellProps) {
             vagaread
           </span>
         </div>
-
-        {/* Actions */}
         <button
           type="button"
           onClick={onOpenImport}
@@ -54,7 +50,6 @@ export function AppShell({ onOpenImport, children }: AppShellProps) {
         </button>
       </header>
 
-      {/* ── Main content ──────────────────────────────────────────── */}
       <main className="flex flex-1 overflow-hidden">{children}</main>
     </div>
   );

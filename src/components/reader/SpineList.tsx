@@ -7,28 +7,12 @@ interface SpineListProps {
   onSelect: (index: number) => void;
 }
 
-/**
- * Resolve the best available display label for a spine item.
- *
- * Priority:
- *   1. title — from the EPUB NCX / NAV table of contents (exact chapter name)
- *   2. href  — the actual filename inside the EPUB archive, cleaned up
- *   3. idref — internal manifest ID, cleaned up as last resort
- *
- * Cleaning steps applied to href / idref:
- *   - Take only the final path segment (drop directory prefix)
- *   - Strip file extension (.xhtml, .html, .xml …)
- *   - Strip trailing EPUB suffixes: _xhtml, _html, _xml
- *   - Strip leading EPUB prefixes: x_, xhtml_, html_
- *   - Replace underscores / hyphens with spaces, capitalize words
- */
+
 function formatLabel(item: SpineItem, index: number): string {
-  // 1. TOC title is the most accurate — use it if available
   if (item.title && item.title.trim().length > 0) {
     return item.title.trim();
   }
 
-  // 2. Fall back to the href filename, then the idref
   const source = item.href ?? item.idref;
 
   const filename = source.split('/').pop() ?? source;
@@ -41,10 +25,6 @@ function formatLabel(item: SpineItem, index: number): string {
   return spaced.replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-/**
- * Left sidebar listing the EPUB spine (chapter list).
- * Clicking any item jumps to that chapter from the beginning.
- */
 export function SpineList({ items, isLoading, currentIndex, onSelect }: SpineListProps) {
   return (
     <aside className="flex flex-col w-52 shrink-0 bg-[#f5f4f1] border-r border-app-border overflow-hidden">

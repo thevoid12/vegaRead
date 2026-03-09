@@ -439,7 +439,6 @@ export function BookContent({
         />
       </div>
 
-      {/* ── Navigation bar ──────────────────────────────────────── */}
       <div className="flex items-center justify-between px-4 py-2.5 bg-app-surface border-t border-app-border shrink-0 select-none min-w-0">
         <button
           type="button"

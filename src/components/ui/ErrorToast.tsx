@@ -32,7 +32,6 @@ export function ErrorToast({ message, onDismiss, duration = 4000 }: ErrorToastPr
       "
       style={{ animation: 'toast-in 0.2s ease-out' }}
     >
-      {/* Error icon */}
       <div className="mt-0.5 shrink-0 w-5 h-5 rounded-full bg-red-100 flex items-center justify-center">
         <svg
           className="w-3 h-3 text-red-600"
@@ -48,10 +47,8 @@ export function ErrorToast({ message, onDismiss, duration = 4000 }: ErrorToastPr
         </svg>
       </div>
 
-      {/* Message */}
       <p className="flex-1 text-sm leading-snug">{message}</p>
 
-      {/* Dismiss button */}
       <button
         type="button"
         onClick={onDismiss}

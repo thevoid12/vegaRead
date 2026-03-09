@@ -3,37 +3,19 @@ interface FocusOverlayProps {
   wordIdx: number;
   wordCount: number;
   isRunning: boolean;
-  /** True = overlay just opened, timer not started yet — show Start button. */
   isReady: boolean;
   wpm: number;
   focusFontSize: number;
-  /** Fill colour of the displayed word (default: black). */
   focusWordColor?: string;
-  /**
-   * 'static'   — book blurred behind, highlight does not track (default)
-   * 'tracking' — book blurred behind, highlight follows current word
-   * 'opaque'   — solid dark background, no book visible
-   */
   backgroundMode?: 'static' | 'tracking' | 'opaque';
   onFontSizeIncrease: () => void;
   onFontSizeDecrease: () => void;
-  /** Called from the ready state when the user clicks Start Reading. */
   onStart: () => void;
   onPause: () => void;
   onResume: () => void;
   onStop: () => void;
 }
 
-/**
- * RSVP (Rapid Serial Visual Presentation) focus overlay.
- *
- * Two states:
- *  isReady = true  → "Setup" view: zoom controls + [▶ Start Reading]
- *  isReady = false → "Playing" view: progress bar + Pause/Resume + Stop
- *
- * Text style: black fill, thick white -webkit-text-stroke so the word pops
- * against any background colour behind the glassmorphism backdrop.
- */
 export function FocusOverlay({
   word,
   wordIdx,
@@ -56,10 +38,8 @@ export function FocusOverlay({
   return (
     <div className={`absolute inset-0 z-20 flex flex-col items-center justify-center ${backgroundMode === 'opaque' ? 'bg-[#1a1a1a]' : 'bg-black/55 backdrop-blur-[3px]'}`}>
 
-      {/* ── Glassmorphism card ───────────────────────────── */}
       <div className="rounded-2xl bg-white/20 backdrop-blur border border-white/30 shadow-2xl px-10 py-8 flex flex-col items-center gap-6 w-[min(480px,65vw)]">
 
-        {/* ── Word display ───────────────────────────────── */}
         <div
           className="text-center select-none break-words w-full"
           style={{
@@ -82,7 +62,6 @@ export function FocusOverlay({
           {word || '\u00A0' /* nbsp keeps height stable on empty word */}
         </div>
 
-        {/* ── Zoom controls (visible in both states) ─────── */}
         <div className="flex items-center gap-3">
           <button
             type="button"
@@ -107,7 +86,6 @@ export function FocusOverlay({
           </button>
         </div>
 
-        {/* ── Ready state: Start button ───────────────────── */}
         {isReady ? (
           <div className="flex items-center gap-3 mt-1">
             <button
@@ -129,9 +107,7 @@ export function FocusOverlay({
             </button>
           </div>
         ) : (
-          /* ── Playing/paused state ──────────────────────── */
           <>
-            {/* Progress bar */}
             <div className="w-full h-0.5 bg-white/20 rounded-full overflow-hidden">
               <div
                 className="h-full bg-white/70 rounded-full"
@@ -139,12 +115,10 @@ export function FocusOverlay({
               />
             </div>
 
-            {/* Stats */}
             <div className="text-white/50 text-xs tabular-nums select-none -mt-2">
               {wordIdx + 1}&thinsp;/&thinsp;{wordCount} words&ensp;&middot;&ensp;{wpm}&thinsp;wpm
             </div>
 
-            {/* Playback controls */}
             <div className="flex items-center gap-3 mt-1">
               <button
                 type="button"

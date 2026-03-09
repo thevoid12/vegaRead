@@ -6,7 +6,6 @@ interface EmptyLibraryProps {
 export function EmptyLibrary({ onImport }: EmptyLibraryProps) {
   return (
     <div className="flex-1 flex flex-col items-center justify-center gap-5 px-8 py-20 text-center">
-      {/* Icon container */}
       <div className="w-20 h-20 rounded-full bg-app-surface border border-app-border flex items-center justify-center">
         <svg
           className="w-10 h-10 text-fg-muted"
@@ -18,7 +17,6 @@ export function EmptyLibrary({ onImport }: EmptyLibraryProps) {
         </svg>
       </div>
 
-      {/* Copy */}
       <div>
         <h2 className="text-fg-primary text-lg font-semibold mb-1.5">Your library is empty</h2>
         <p className="text-fg-secondary text-sm leading-relaxed max-w-xs">
@@ -26,7 +24,6 @@ export function EmptyLibrary({ onImport }: EmptyLibraryProps) {
         </p>
       </div>
 
-      {/* CTA — opens the ImportModal */}
       <button
         type="button"
         onClick={onImport}

@@ -39,8 +39,6 @@ function App() {
 
   const openImportModal = useCallback(() => setShowImportModal(true), []);
 
-  // ── Routing ─────────────────────────────────────────────────────
-  // Reading view: full-page, replaces the app shell entirely
   if (activeBook) {
     return (
       <>

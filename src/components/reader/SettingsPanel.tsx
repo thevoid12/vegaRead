@@ -49,7 +49,6 @@ export function SettingsPanel({
 }: SettingsPanelProps) {
   return (
     <>
-      {/* Click-away backdrop */}
       <div
         className={`absolute inset-0 z-30 bg-black/20 transition-opacity duration-300 ${
           isOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
@@ -58,7 +57,6 @@ export function SettingsPanel({
         aria-hidden="true"
       />
 
-      {/* Panel */}
       <div
         className={`
           absolute top-0 right-0 h-full z-40 w-72
@@ -71,7 +69,6 @@ export function SettingsPanel({
         role="dialog"
         aria-label="Reading settings"
       >
-        {/* Header */}
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-app-border shrink-0">
           <span className="text-sm font-semibold text-fg-primary">Reading Settings</span>
           <button
@@ -86,10 +83,8 @@ export function SettingsPanel({
           </button>
         </div>
 
-        {/* Scrollable content */}
         <div className="flex-1 overflow-y-auto px-5 py-5 flex flex-col gap-7">
 
-          {/* ── Speed ── */}
           <section className="flex flex-col gap-2">
             <div className="flex items-baseline justify-between">
               <span className="text-[11px] font-semibold text-fg-secondary uppercase tracking-wider">Speed</span>
@@ -114,7 +109,6 @@ export function SettingsPanel({
 
           <div className="h-px bg-app-border" />
 
-          {/* ── Reading font size ── */}
           <section className="flex flex-col gap-2">
             <span className="text-[11px] font-semibold text-fg-secondary uppercase tracking-wider">Reading Font</span>
             <div className="flex items-center gap-2">
@@ -140,7 +134,6 @@ export function SettingsPanel({
             </div>
           </section>
 
-          {/* ── Focus word size ── */}
           <section className="flex flex-col gap-2">
             <span className="text-[11px] font-semibold text-fg-secondary uppercase tracking-wider">Focus Word Size</span>
             <div className="flex items-center gap-2">
@@ -168,7 +161,6 @@ export function SettingsPanel({
 
           <div className="h-px bg-app-border" />
 
-          {/* ── Inline highlight color ── */}
           <section className="flex flex-col gap-2.5">
             <span className="text-[11px] font-semibold text-fg-secondary uppercase tracking-wider">Inline Highlight</span>
             <label className="flex items-center gap-3 cursor-pointer group">
@@ -189,7 +181,6 @@ export function SettingsPanel({
             </label>
           </section>
 
-          {/* ── Focus background mode ── */}
           <section className="flex flex-col gap-2">
             <span className="text-[11px] font-semibold text-fg-secondary uppercase tracking-wider">Focus Background</span>
             <div className="flex rounded-lg overflow-hidden border border-app-border text-xs font-medium">
@@ -211,7 +202,6 @@ export function SettingsPanel({
             </span>
           </section>
 
-          {/* ── Focus word color ── */}
           <section className="flex flex-col gap-2.5">
             <span className="text-[11px] font-semibold text-fg-secondary uppercase tracking-wider">Focus Word Color</span>
             <label className="flex items-center gap-3 cursor-pointer group">

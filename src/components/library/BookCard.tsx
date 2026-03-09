@@ -37,12 +37,10 @@ export function BookCard({ book, onClick }: BookCardProps) {
         focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1 focus-visible:ring-offset-app-bg
       "
     >
-      {/* Cover — 2:3 aspect ratio */}
       <div className="aspect-[2/3] w-full overflow-hidden">
         <BookCover title={title} author={author} coverSrc={coverSrc} />
       </div>
 
-      {/* Metadata footer */}
       <div className="px-3 pt-2.5 pb-3 flex flex-col gap-0.5 min-w-0">
         <h3 className="text-fg-primary text-sm font-medium leading-snug line-clamp-2 group-hover:text-accent transition-colors">
           {title}

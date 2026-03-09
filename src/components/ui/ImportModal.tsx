@@ -5,33 +5,21 @@ import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
 interface ImportModalProps {
   isOpen: boolean;
   onClose: () => void;
-  /** Called with the validated .epub file path. Should throw on failure. */
   onImport: (filePath: string) => Promise<void>;
-  /** Called when the user drops a non-EPUB file. */
   onError: (message: string) => void;
 }
 
-/**
- * Modal overlay with a drag-and-drop zone and a "Browse files" button.
- *
- * File selection paths:
- *  1. OS drag-drop onto the app window → captured via Tauri's onDragDropEvent
- *  2. Click "Browse files" → native file picker via tauri-plugin-dialog
- *
- * Non-.epub files are rejected here before reaching the handler.
- */
+
 export function ImportModal({ isOpen, onClose, onImport, onError }: ImportModalProps) {
   const [isDragOver, setIsDragOver] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
 
-  // Track whether the component is still mounted to guard async state updates
   const mountedRef = useRef(true);
   useEffect(() => {
     mountedRef.current = true;
     return () => { mountedRef.current = false; };
   }, []);
 
-  // Validate extension and kick off the import
   const processFilePath = useCallback(async (filePath: string) => {
     if (!filePath.toLowerCase().endsWith('.epub')) {
       onError('Only EPUB files are supported. Please select a .epub file.');
@@ -50,7 +38,6 @@ export function ImportModal({ isOpen, onClose, onImport, onError }: ImportModalP
     }
   }, [onImport, onError]);
 
-  // ── Tauri window-level drag-drop listener ───────────────────────────────
   useEffect(() => {
     if (!isOpen) return;
 
@@ -91,13 +78,11 @@ export function ImportModal({ isOpen, onClose, onImport, onError }: ImportModalP
     return () => window.removeEventListener('keydown', handleKey);
   }, [isOpen, isProcessing, onClose]);
 
-  // ── Browse via native file picker ────────────────────────────────────────
   const handleBrowse = useCallback(async () => {
     const selected = await open({
       multiple: false,
       filters: [{ name: 'EPUB', extensions: ['epub'] }],
     });
-    // `open` with multiple: false returns string | null
     if (selected && typeof selected === 'string') {
       await processFilePath(selected);
     }
@@ -107,14 +92,12 @@ export function ImportModal({ isOpen, onClose, onImport, onError }: ImportModalP
 
   return (
     <>
-      {/* ── Backdrop ─────────────────────────────────────────────── */}
       <div
         className="fixed inset-0 z-50 bg-black/30 backdrop-blur-[3px]"
         onClick={() => !isProcessing && onClose()}
         aria-hidden="true"
       />
 
-      {/* ── Modal card ───────────────────────────────────────────── */}
       <div
         role="dialog"
         aria-modal="true"
@@ -129,7 +112,6 @@ export function ImportModal({ isOpen, onClose, onImport, onError }: ImportModalP
         "
         style={{ animation: 'modal-in 0.18s ease-out forwards' }}
       >
-        {/* Header */}
         <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-app-border">
           <h2 className="text-fg-primary text-base font-semibold">Import Book</h2>
           <button
@@ -145,9 +127,7 @@ export function ImportModal({ isOpen, onClose, onImport, onError }: ImportModalP
           </button>
         </div>
 
-        {/* Body */}
         <div className="p-5">
-          {/* Drop zone */}
           <div
             className={`
               relative flex flex-col items-center justify-center gap-3
@@ -162,14 +142,12 @@ export function ImportModal({ isOpen, onClose, onImport, onError }: ImportModalP
             `}
           >
             {isProcessing ? (
-              // Loading state
               <>
                 <span className="w-10 h-10 rounded-full border-[3px] border-accent border-t-transparent animate-spin" />
                 <p className="text-fg-secondary text-sm">Importing book…</p>
               </>
             ) : (
               <>
-                {/* Upload icon */}
                 <div className={`w-14 h-14 rounded-full flex items-center justify-center transition-colors ${isDragOver ? 'bg-accent/15' : 'bg-app-hover'}`}>
                   <svg
                     className={`w-7 h-7 transition-colors ${isDragOver ? 'text-accent' : 'text-fg-muted'}`}
@@ -196,14 +174,12 @@ export function ImportModal({ isOpen, onClose, onImport, onError }: ImportModalP
                       <p className="text-fg-muted text-xs mt-1">Supports .epub files only</p>
                     </div>
 
-                    {/* Divider */}
                     <div className="flex items-center gap-3 w-full max-w-[200px]">
                       <div className="flex-1 h-px bg-app-border" />
                       <span className="text-fg-muted text-xs">or</span>
                       <div className="flex-1 h-px bg-app-border" />
                     </div>
 
-                    {/* Browse button */}
                     <button
                       type="button"
                       onClick={handleBrowse}
