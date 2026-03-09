@@ -9,7 +9,7 @@ import { SettingsPanel } from './SettingsPanel';
 import { getBookContent, listSpine, saveReadingProgress, saveSrPosition, getSettings, saveSettings } from '../../api/tauri';
 import { wrapWordsInSpans, extractWords, sanitizeEpubHtml } from '../../utils/speedReader';
 import { ErrorToast } from '../ui/ErrorToast';
-import type { Book, SpineItem } from '../../types';
+import type { Book, SpineItem, AppSettings } from '../../types';
 
 const FONT_SIZE_MIN     = 12;
 const FONT_SIZE_MAX     = 32;
@@ -70,10 +70,13 @@ export function ReadingView({ book, onBack }: ReadingViewProps) {
   const [srHighlightColor,    setSrHighlightColor]    = useState(SR_HIGHLIGHT_DEFAULT);
   const [focusWordColor,      setFocusWordColor]      = useState(SR_FOCUS_COLOR_DEFAULT);
   const [focusBackgroundMode, setFocusBackgroundMode] = useState<'static' | 'tracking' | 'opaque'>('tracking');
-  const saveSettingsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [pageMode,            setPageMode]            = useState<'single' | 'double'>('double');
+  const saveSettingsTimerRef  = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingSettingsRef    = useRef<AppSettings | null>(null);
 
   useEffect(() => {
     getSettings().then((s) => {
+      srWpmRef.current = s.wpm;
       setSrWpm(s.wpm);
       setFontSize(s.font_size);
       setSrFocusFontSize(s.focus_font_size);
@@ -82,25 +85,32 @@ export function ReadingView({ book, onBack }: ReadingViewProps) {
       if (s.focus_background_mode === 'static' || s.focus_background_mode === 'tracking' || s.focus_background_mode === 'opaque') {
         setFocusBackgroundMode(s.focus_background_mode);
       }
+      if (s.page_mode === 'single' || s.page_mode === 'double') {
+        setPageMode(s.page_mode);
+      }
     }).catch(() => { /* use defaults on error */ });
   }, []);
 
   useEffect(() => {
+    const s: AppSettings = {
+      wpm: srWpm,
+      font_size: fontSize,
+      focus_font_size: srFocusFontSize,
+      inline_highlight_color: srHighlightColor,
+      focus_word_color: focusWordColor,
+      focus_background_mode: focusBackgroundMode,
+      page_mode: pageMode,
+    };
+    pendingSettingsRef.current = s;
     if (saveSettingsTimerRef.current) clearTimeout(saveSettingsTimerRef.current);
     saveSettingsTimerRef.current = setTimeout(() => {
-      saveSettings({
-        wpm: srWpm,
-        font_size: fontSize,
-        focus_font_size: srFocusFontSize,
-        inline_highlight_color: srHighlightColor,
-        focus_word_color: focusWordColor,
-        focus_background_mode: focusBackgroundMode,
-      }).catch(() => {});
+      pendingSettingsRef.current = null;
+      saveSettings(s).catch(() => {});
     }, 500);
     return () => {
       if (saveSettingsTimerRef.current) clearTimeout(saveSettingsTimerRef.current);
     };
-  }, [srWpm, fontSize, srFocusFontSize, srHighlightColor, focusWordColor, focusBackgroundMode]);
+  }, [srWpm, fontSize, srFocusFontSize, srHighlightColor, focusWordColor, focusBackgroundMode, pageMode]);
 
   const [srEntryMode, setSrEntryMode] = useState<false | SrMode>(false);
   const srEntryModeRef = useRef<false | SrMode>(false);
@@ -128,12 +138,23 @@ export function ReadingView({ book, onBack }: ReadingViewProps) {
 
   useEffect(() => {
     let unlisten: (() => void) | null = null;
-    let isSavingClose = false;
 
     getCurrentWindow().onCloseRequested(async (event) => {
-      if (isSavingClose) return;
       event.preventDefault();
-      isSavingClose = true;
+      // Remove listener first so re-triggering close doesn't loop
+      unlisten?.();
+      unlisten = null;
+      // Flush pending settings
+      if (saveSettingsTimerRef.current) {
+        clearTimeout(saveSettingsTimerRef.current);
+        saveSettingsTimerRef.current = null;
+      }
+      const pendingS = pendingSettingsRef.current;
+      if (pendingS) {
+        pendingSettingsRef.current = null;
+        await saveSettings(pendingS).catch(() => {});
+      }
+      // Flush pending reading progress
       if (saveProgressDebounceRef.current) {
         clearTimeout(saveProgressDebounceRef.current);
         saveProgressDebounceRef.current = null;
@@ -151,7 +172,11 @@ export function ReadingView({ book, onBack }: ReadingViewProps) {
       } catch (e) {
         console.error('[close save]', e);
       }
-      await getCurrentWindow().close();
+      try {
+        await getCurrentWindow().close();
+      } catch (e) {
+        console.error('[close]', e);
+      }
     }).then(fn => { unlisten = fn; });
 
     return () => { unlisten?.(); };
@@ -447,6 +472,15 @@ export function ReadingView({ book, onBack }: ReadingViewProps) {
   }, [saveSrBeforeNav]);
 
   const handleBack = useCallback(async () => {
+    if (saveSettingsTimerRef.current) {
+      clearTimeout(saveSettingsTimerRef.current);
+      saveSettingsTimerRef.current = null;
+    }
+    const pendingS = pendingSettingsRef.current;
+    if (pendingS) {
+      pendingSettingsRef.current = null;
+      await saveSettings(pendingS).catch(() => {});
+    }
     if (saveProgressDebounceRef.current) {
       clearTimeout(saveProgressDebounceRef.current);
       saveProgressDebounceRef.current = null;
@@ -470,6 +504,36 @@ export function ReadingView({ book, onBack }: ReadingViewProps) {
     () => setFontSize((f) => Math.min(f + FONT_SIZE_STEP, FONT_SIZE_MAX)), []);
   const decreaseFontSize = useCallback(
     () => setFontSize((f) => Math.max(f - FONT_SIZE_STEP, FONT_SIZE_MIN)), []);
+
+  // ── Keyboard shortcuts ────────────────────────────────────────────────────
+  const handleKeyDown = useCallback((e: KeyboardEvent) => {
+    const isMod = e.metaKey || e.ctrlKey; // Cmd on macOS, Ctrl on Linux/Windows
+    if (isMod && (e.key === '=' || e.key === '+')) {
+      e.preventDefault();
+      setFontSize((f) => Math.min(f + FONT_SIZE_STEP, FONT_SIZE_MAX));
+      return;
+    }
+    if (isMod && e.key === '-') {
+      e.preventDefault();
+      setFontSize((f) => Math.max(f - FONT_SIZE_STEP, FONT_SIZE_MIN));
+      return;
+    }
+    if (e.key === ' ' && !e.metaKey && !e.ctrlKey && !e.altKey) {
+      const state = srStateRef.current;
+      if (state === 'running') {
+        e.preventDefault();
+        handlePauseSR();
+      } else if (state === 'paused') {
+        e.preventDefault();
+        handleResumeSR();
+      }
+    }
+  }, [handlePauseSR, handleResumeSR]);
+
+  useEffect(() => {
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleKeyDown]);
 
   const title  = book.meta_data.title?.[0]   ?? 'Untitled';
   const author = book.meta_data.creator?.[0] ?? '';
@@ -550,6 +614,8 @@ export function ReadingView({ book, onBack }: ReadingViewProps) {
             onPageChange={handlePageChange}
             srEntryMode={srEntryMode}
             onSrWordClick={handleSrWordClick}
+            pageMode={pageMode}
+            onKeyDown={handleKeyDown}
           />
 
           {showFocusOverlay && (
@@ -590,6 +656,8 @@ export function ReadingView({ book, onBack }: ReadingViewProps) {
           onFocusWordColorChange={setFocusWordColor}
           focusBackgroundMode={focusBackgroundMode}
           onFocusBackgroundModeChange={setFocusBackgroundMode}
+          pageMode={pageMode}
+          onPageModeChange={setPageMode}
         />
       </div>
 
