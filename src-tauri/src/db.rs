@@ -45,7 +45,22 @@ pub async fn init_db(app: &tauri::AppHandle) -> Result<SqlitePool, ApplicationEr
         create_tables(&pool).await?;
     }
 
+    ensure_settings_row(&pool).await?;
+
     Ok(pool)
+}
+
+/// Inserts the app_settings sentinel row if it doesn't exist yet.
+/// Idempotent — safe to run on every startup.
+async fn ensure_settings_row(pool: &SqlitePool) -> Result<(), ApplicationError> {
+    sqlx::query(crate::queries::SEED_SETTINGS_ROW)
+        .execute(pool)
+        .await
+        .map_err(|e| ApplicationError {
+            code: codes::DATABASE_ERROR,
+            message: Some(format!("failed to seed settings row: {e}")),
+        })?;
+    Ok(())
 }
 
 // we create the initial schema which is in /migrations/schema.sql

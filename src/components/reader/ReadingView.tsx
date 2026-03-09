@@ -9,7 +9,7 @@ import { SettingsPanel } from './SettingsPanel';
 import { getBookContent, listSpine, saveReadingProgress, saveSrPosition, getSettings, saveSettings } from '../../api/tauri';
 import { wrapWordsInSpans, extractWords, sanitizeEpubHtml } from '../../utils/speedReader';
 import { ErrorToast } from '../ui/ErrorToast';
-import type { Book, SpineItem } from '../../types';
+import type { Book, SpineItem, AppSettings } from '../../types';
 
 const FONT_SIZE_MIN     = 12;
 const FONT_SIZE_MAX     = 32;
@@ -70,10 +70,12 @@ export function ReadingView({ book, onBack }: ReadingViewProps) {
   const [srHighlightColor,    setSrHighlightColor]    = useState(SR_HIGHLIGHT_DEFAULT);
   const [focusWordColor,      setFocusWordColor]      = useState(SR_FOCUS_COLOR_DEFAULT);
   const [focusBackgroundMode, setFocusBackgroundMode] = useState<'static' | 'tracking' | 'opaque'>('tracking');
-  const saveSettingsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const saveSettingsTimerRef  = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingSettingsRef    = useRef<AppSettings | null>(null);
 
   useEffect(() => {
     getSettings().then((s) => {
+      srWpmRef.current = s.wpm;
       setSrWpm(s.wpm);
       setFontSize(s.font_size);
       setSrFocusFontSize(s.focus_font_size);
@@ -86,16 +88,19 @@ export function ReadingView({ book, onBack }: ReadingViewProps) {
   }, []);
 
   useEffect(() => {
+    const s: AppSettings = {
+      wpm: srWpm,
+      font_size: fontSize,
+      focus_font_size: srFocusFontSize,
+      inline_highlight_color: srHighlightColor,
+      focus_word_color: focusWordColor,
+      focus_background_mode: focusBackgroundMode,
+    };
+    pendingSettingsRef.current = s;
     if (saveSettingsTimerRef.current) clearTimeout(saveSettingsTimerRef.current);
     saveSettingsTimerRef.current = setTimeout(() => {
-      saveSettings({
-        wpm: srWpm,
-        font_size: fontSize,
-        focus_font_size: srFocusFontSize,
-        inline_highlight_color: srHighlightColor,
-        focus_word_color: focusWordColor,
-        focus_background_mode: focusBackgroundMode,
-      }).catch(() => {});
+      pendingSettingsRef.current = null;
+      saveSettings(s).catch(() => {});
     }, 500);
     return () => {
       if (saveSettingsTimerRef.current) clearTimeout(saveSettingsTimerRef.current);
@@ -128,12 +133,23 @@ export function ReadingView({ book, onBack }: ReadingViewProps) {
 
   useEffect(() => {
     let unlisten: (() => void) | null = null;
-    let isSavingClose = false;
 
     getCurrentWindow().onCloseRequested(async (event) => {
-      if (isSavingClose) return;
       event.preventDefault();
-      isSavingClose = true;
+      // Remove listener first so re-triggering close doesn't loop
+      unlisten?.();
+      unlisten = null;
+      // Flush pending settings
+      if (saveSettingsTimerRef.current) {
+        clearTimeout(saveSettingsTimerRef.current);
+        saveSettingsTimerRef.current = null;
+      }
+      const pendingS = pendingSettingsRef.current;
+      if (pendingS) {
+        pendingSettingsRef.current = null;
+        await saveSettings(pendingS).catch(() => {});
+      }
+      // Flush pending reading progress
       if (saveProgressDebounceRef.current) {
         clearTimeout(saveProgressDebounceRef.current);
         saveProgressDebounceRef.current = null;
@@ -151,7 +167,11 @@ export function ReadingView({ book, onBack }: ReadingViewProps) {
       } catch (e) {
         console.error('[close save]', e);
       }
-      await getCurrentWindow().close();
+      try {
+        await getCurrentWindow().close();
+      } catch (e) {
+        console.error('[close]', e);
+      }
     }).then(fn => { unlisten = fn; });
 
     return () => { unlisten?.(); };
@@ -447,6 +467,15 @@ export function ReadingView({ book, onBack }: ReadingViewProps) {
   }, [saveSrBeforeNav]);
 
   const handleBack = useCallback(async () => {
+    if (saveSettingsTimerRef.current) {
+      clearTimeout(saveSettingsTimerRef.current);
+      saveSettingsTimerRef.current = null;
+    }
+    const pendingS = pendingSettingsRef.current;
+    if (pendingS) {
+      pendingSettingsRef.current = null;
+      await saveSettings(pendingS).catch(() => {});
+    }
     if (saveProgressDebounceRef.current) {
       clearTimeout(saveProgressDebounceRef.current);
       saveProgressDebounceRef.current = null;

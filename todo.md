@@ -11,7 +11,7 @@
 - [x] text zoom also needs to be stored in the database and restored
 
 
-- [ ] upload directly dreag and drop
+- [ ] upload directly drag and drop
 - [ ] single side book
 - [ ] cmd + and cmd -
 - [ ] space bar pause
