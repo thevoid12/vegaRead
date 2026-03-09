@@ -62,6 +62,9 @@ function App() {
           isLoading={isLoading}
           onBookClick={setActiveBook}
           onOpenImport={openImportModal}
+          onImport={handleImport}
+          onError={setToastError}
+          dragEnabled={!showImportModal}
         />
       </AppShell>
 
