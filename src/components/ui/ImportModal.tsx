@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { open } from '@tauri-apps/plugin-dialog';
-import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
+import { useTauriDragDrop } from '../../hooks/useTauriDragDrop';
 
 interface ImportModalProps {
   isOpen: boolean;
@@ -11,7 +11,6 @@ interface ImportModalProps {
 
 
 export function ImportModal({ isOpen, onClose, onImport, onError }: ImportModalProps) {
-  const [isDragOver, setIsDragOver] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
 
   const mountedRef = useRef(true);
@@ -38,35 +37,7 @@ export function ImportModal({ isOpen, onClose, onImport, onError }: ImportModalP
     }
   }, [onImport, onError]);
 
-  useEffect(() => {
-    if (!isOpen) return;
-
-    let unlisten: (() => void) | undefined;
-
-    (async () => {
-      const webviewWindow = getCurrentWebviewWindow();
-      unlisten = await webviewWindow.onDragDropEvent((event) => {
-        const { type } = event.payload;
-
-        if (type === 'enter') {
-          setIsDragOver(true);
-        } else if (type === 'leave') {
-          setIsDragOver(false);
-        } else if (type === 'drop') {
-          setIsDragOver(false);
-          const paths = (event.payload as { type: 'drop'; paths: string[] }).paths;
-          if (paths.length > 0) {
-            processFilePath(paths[0]);
-          }
-        }
-      });
-    })();
-
-    return () => {
-      unlisten?.();
-      setIsDragOver(false);
-    };
-  }, [isOpen, processFilePath]);
+  const isDragOver = useTauriDragDrop(isOpen, processFilePath);
 
   // Close on Escape key
   useEffect(() => {

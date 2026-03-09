@@ -16,3 +16,10 @@ pub const GET_SETTINGS: &str = "SELECT settings_json FROM vagaread WHERE id = 'a
 
 pub const UPDATE_SETTINGS: &str =
     "UPDATE vagaread SET settings_json = ?, updated_on = datetime('now') WHERE id = 'app_settings'";
+
+/// Idempotent — inserts the app_settings sentinel row only if it doesn't exist yet.
+/// Safe to run on every startup (for both new and existing databases).
+pub const SEED_SETTINGS_ROW: &str =
+    "INSERT INTO vagaread (id, internal_book_path, meta_data, current_read_idx, current_spine, current_page, speed_read_pointer, settings_json, created_on, updated_on, is_deleted) \
+     SELECT 'app_settings', '', '{}', '0', '0', '0', '0:inline', '{}', datetime('now'), datetime('now'), true \
+     WHERE NOT EXISTS (SELECT 1 FROM vagaread WHERE id = 'app_settings')";

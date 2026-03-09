@@ -19,6 +19,8 @@ interface BookContentProps {
   onPageChange?: (page: number) => void;
   srEntryMode?: false | string;
   onSrWordClick?: (wordIdx: number) => void;
+  pageMode?: 'single' | 'double';
+  onKeyDown?: (e: KeyboardEvent) => void;
 }
 const TWO_PAGE_MIN_WIDTH = 600;
 
@@ -136,6 +138,8 @@ export function BookContent({
   onPageChange,
   srEntryMode,
   onSrWordClick,
+  pageMode = 'double',
+  onKeyDown,
 }: BookContentProps) {
   const iframeRef      = useRef<HTMLIFrameElement>(null);
   const containerRef   = useRef<HTMLDivElement>(null);
@@ -148,10 +152,12 @@ export function BookContent({
   const onIframeClickRef    = useRef(onIframeClick);
   const onPageChangeRef     = useRef(onPageChange);
   const onSrWordClickRef    = useRef(onSrWordClick);
+  const onKeyDownRef        = useRef(onKeyDown);
   onWordRightClickRef.current = onWordRightClick;
   onIframeClickRef.current    = onIframeClick;
   onPageChangeRef.current     = onPageChange;
   onSrWordClickRef.current    = onSrWordClick;
+  onKeyDownRef.current        = onKeyDown;
 
   const [iframeVersion, setIframeVersion] = useState(0);
 
@@ -208,7 +214,7 @@ export function BookContent({
     if (!doc?.head || !doc?.body) return;
 
     const containerWidth = containerRef.current?.clientWidth ?? 0;
-    const isTwoPage = containerWidth >= TWO_PAGE_MIN_WIDTH;
+    const isTwoPage = pageMode === 'double' && containerWidth >= TWO_PAGE_MIN_WIDTH;
 
     let styleEl = doc.getElementById('vr-reading-styles') as HTMLStyleElement | null;
     if (!styleEl) {
@@ -258,7 +264,7 @@ export function BookContent({
         if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
       });
     });
-  }, [fontSize]);
+  }, [fontSize, pageMode]);
 
   const handleIframeLoad = useCallback(() => {
     refresh();
@@ -312,6 +318,10 @@ export function BookContent({
 
       doc.addEventListener('click', () => {
         onIframeClickRef.current?.();
+      });
+
+      doc.addEventListener('keydown', (e: KeyboardEvent) => {
+        onKeyDownRef.current?.(e);
       });
     }
 
@@ -390,7 +400,7 @@ export function BookContent({
     if (!el) return;
 
     const containerWidth = containerRef.current?.clientWidth ?? 0;
-    const isTwoPage = containerWidth >= TWO_PAGE_MIN_WIDTH;
+    const isTwoPage = pageMode === 'double' && containerWidth >= TWO_PAGE_MIN_WIDTH;
 
     if (isTwoPage) {
       const viewWidth = viewWidthRef.current || doc.documentElement.clientWidth;

@@ -18,16 +18,16 @@ Download the appropriate file from the [Releases](../../releases) tab:
 
 **macOS note:** 
 - The app is not notarized yet. On first open mac will give you a stupid malware error, 
-- Try to open the app normally — it will be blocked
+- Try to open the app normally,it will be blocked
 - Go to System Settings → Privacy & Security
 Scroll down to the Security section
-- You'll see a message like "[App] was blocked" — click "Open Anyway"
+- You'll see a message like "[App] was blocked",click "Open Anyway"
 - Enter your password if prompted
 ## Features
 
 - EPUB library with cover images and reading progress persistence
 - Chapter-by-chapter reading via spine navigation with a sidebar
-- RSVP speed reader — configurable WPM, inline and focus display modes
+- RSVP speed reader:configurable WPM, inline and focus display modes
 - Word-level entry: click any word in the reader to start SR from that point
 - Per-book reading position saved automatically (spine index, char offset, visual page)
 - Global settings: WPM, font sizes, highlight color, focus background mode

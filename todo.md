@@ -11,11 +11,11 @@
 - [x] text zoom also needs to be stored in the database and restored
 
 
-- [ ] upload directly dreag and drop
-- [ ] single side book
-- [ ] cmd + and cmd -
-- [ ] space bar pause
+- [x] upload directly drag and drop
+- [x] single side book
+- [x] cmd + and cmd -
+- [x] space bar pause
 - [ ] hanging while zooming in inline mode 
-- [ ] persistant in library
+- [x] persistant in library
 - [ ] delete book
-- [ ] unable to close the app in reading mode
+- [x] unable to close the app in reading mode
