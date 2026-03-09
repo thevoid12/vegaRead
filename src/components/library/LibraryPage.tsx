@@ -9,11 +9,7 @@ interface LibraryPageProps {
   onOpenImport: () => void;
 }
 
-/**
- * The main home / library view.
- * Shows a loading spinner while fetching, the empty state if no books,
- * or a responsive book grid.
- */
+
 export function LibraryPage({
   books,
   isLoading,

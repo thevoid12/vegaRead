@@ -8,10 +8,7 @@ interface BookCardProps {
   onClick: (book: Book) => void;
 }
 
-/**
- * A single book card shown in the library grid.
- * Displays the cover (or placeholder), title, author, and an "in progress" badge.
- */
+
 export function BookCard({ book, onClick }: BookCardProps) {
   const title  = book.meta_data.title?.[0]   ?? 'Untitled';
   const author = book.meta_data.creator?.[0];

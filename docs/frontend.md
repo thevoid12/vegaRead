@@ -1,8 +1,8 @@
-# vegaRead Frontend Documentation
+# vagaread Frontend Documentation
 
 ## Overview
 
-The frontend is a React 19 + TypeScript application built with Vite 7 and styled with Tailwind CSS v3. It communicates with the Tauri 2 Rust backend exclusively through the **invoke** IPC mechanism wrapped in a typed API layer.
+The frontend is a React 19 + TypeScript application built with Vite 7 and styled with Tailwind CSS v3. It communicates with the Tauri 2 Rust backend exclusively through the `invoke` IPC mechanism, wrapped in a typed API layer. All frontend assets are embedded into the Rust binary at compile time.
 
 ---
 
@@ -10,10 +10,10 @@ The frontend is a React 19 + TypeScript application built with Vite 7 and styled
 
 - **React 19** with hooks (useState, useEffect, useCallback, useRef)
 - **TypeScript** for static type safety across all components and API calls
-- **Tailwind CSS v3** with a custom Foliate light-theme color palette
-- **Vite 7** as the dev server and bundler
-- **@tauri-apps/api** for IPC and window event bindings
-- **@tauri-apps/plugin-dialog** for the native file picker
+- **Tailwind CSS v3** with a custom Adwaita light-theme color palette
+- **Vite 7** — dev server and bundler (ESNext target in production)
+- **@tauri-apps/api** — IPC, window events, app lifecycle
+- **@tauri-apps/plugin-dialog** — native OS file picker
 
 ---
 
@@ -22,29 +22,29 @@ The frontend is a React 19 + TypeScript application built with Vite 7 and styled
 ```
 src/
   api/
-    tauri.ts           — all invoke() calls, single source of truth for backend communication
+    tauri.ts           — all invoke() calls, single source of truth for IPC
   components/
     common/
-      BookCover.tsx    — renders a cover image or a deterministic gradient placeholder
+      BookCover.tsx    — cover image or deterministic gradient placeholder
     layout/
-      AppShell.tsx     — app header bar with logo and Import Book button
+      AppShell.tsx     — header bar with logo and Import Book button
     library/
       BookCard.tsx     — individual book card in the grid
-      EmptyLibrary.tsx — empty state with CTA
+      EmptyLibrary.tsx — empty state with import CTA
       LibraryPage.tsx  — responsive grid of BookCards
     reader/
-      BookContent.tsx  — two-page iframe renderer with CSS column pagination
-      ReadingTopbar.tsx — top bar with back, title, zoom, Start stub
-      ReadingView.tsx  — reader state orchestrator (spine, content, font size)
+      BookContent.tsx  — iframe renderer with CSS column pagination and SR word tokenisation
+      ReadingTopbar.tsx — back, title, zoom, SR entry (crosshair toggle)
+      ReadingView.tsx  — reader state orchestrator
       SpineList.tsx    — left chapter sidebar
     ui/
-      ErrorToast.tsx   — auto-dismissing red error popup
-      ImportModal.tsx  — drag-drop / browse file import modal
+      ErrorToast.tsx   — auto-dismissing error popup
+      ImportModal.tsx  — drag-drop / browse import modal
   types/
     index.ts           — all shared TypeScript interfaces mirroring Rust structs
-  App.tsx              — root component, owns global navigation state
-  main.tsx             — entry point, imports index.css
-  index.css            — Tailwind directives, keyframe animations, scrollbar utilities
+  App.tsx              — root component, owns activeBook navigation state
+  main.tsx             — entry point
+  index.css            — Tailwind directives, animations, scrollbar utilities
 ```
 
 ---
@@ -53,69 +53,66 @@ src/
 
 ### BookMetadata
 
-Mirrors the Rust **HashMap<String, Vec<String>>** extracted from EPUB metadata. Each key is a raw EPUB property name; each value is a list of strings.
-
-Fields: title, creator, publisher, language, description, subject, date, identifier, rights, and any additional EPUB extension properties via the index signature.
+Mirrors `HashMap<String, Vec<String>>` from the Rust backend. Each key is a raw EPUB metadata property name; each value is an array of strings.
 
 ### Book
 
-Mirrors the Rust **vagaread** struct. Represents one book record from the database.
+Mirrors the Rust `Vagaread` struct. One record per imported book.
 
-Fields: vagaread_id (UUID string), internal_fp (path in app data directory), meta_data (BookMetadata), current_read_idx (char offset), current_spine (spine index), is_deleted.
+Fields: `vagaread_id`, `internal_fp`, `meta_data` (BookMetadata), `current_read_idx`, `current_spine`, `current_page`, `sr_word_idx`, `sr_mode`, `is_deleted`.
 
 ### SpineItem
 
-Mirrors **SpineItemResponse**. One item from the EPUB spine (ordered chapter list).
+Mirrors `SpineItemResponse`. One item from the EPUB spine.
 
-Fields: idref, id (nullable), properties (nullable), linear.
+Fields: `idref`, `href` (nullable), `title` (nullable, from NCX/NAV TOC), `id` (nullable), `properties` (nullable), `linear`.
 
 ### ContentResponse
 
-Mirrors **Content_response**. The raw content chunk returned by the backend for one chapter read.
+Mirrors the Rust `ContentResponse`.
 
-Fields:
-- **content** — the EPUB chapter HTML as a string
-- **spine_idx** — the spine index to pass on the next call (may have advanced past the current chapter if it fit within the chunk limit)
-- **next_char_offset** — the character offset within spine_idx for the next call (0 when the chapter was fully read)
+Fields: `content` (raw EPUB HTML), `spine_idx`, `next_char_offset`, `page_size` (always 10,000), `current_page`.
 
 ### BookResponse
 
-Mirrors **book_response**. Wraps a ContentResponse together with the book's UUID.
+Wraps `ContentResponse` with `vagaread_id`. Returned by `getBookContent`.
 
-Fields: vagaread_id, content (ContentResponse).
+### AppSettings
+
+Global reader settings. Fields: `wpm`, `font_size`, `focus_font_size`, `inline_highlight_color`, `focus_word_color`, `focus_background_mode`.
 
 ---
 
 ## API Layer (src/api/tauri.ts)
 
-All calls to the Tauri backend are centralised here. No component calls **invoke** directly.
+All backend calls are centralised here. No component calls `invoke` directly.
 
-### fetchAllBooks
-
-Returns **Book[]**. Maps to `show_home_page_handler`. Called on app start and after every import.
-
-### uploadFile(filePath)
-
-Returns **ContentResponse**. Maps to `upload_file_handler`. Imports the EPUB at the given absolute path into the app data directory, extracts metadata, stores a database record, and returns the first chunk of content.
-
-### getBookContent(fileId, spineIdx, charOffset)
-
-Returns **BookResponse**. Maps to `get_ebook_content_handler`. Fetches the HTML for one chapter (or chunk if the chapter exceeds PAGINATE_CHAR). The HTML is at **res.content.content**.
-
-### listSpine(fileId)
-
-Returns **SpineItem[]**. Maps to `list_spine_handler`. Fetches the ordered spine for a book so the sidebar can be populated.
+| Function | Command | Description |
+|---|---|---|
+| `fetchAllBooks()` | `show_home_page_handler` | Load the library on app start |
+| `uploadFile(filePath)` | `upload_file_handler` | Import an EPUB |
+| `getBookContent(fileId, spineIdx, charOffset)` | `get_ebook_content_handler` | Fetch a content chunk |
+| `listSpine(fileId)` | `list_spine_handler` | Fetch all spine items |
+| `getCoverImage(fileId)` | `get_cover_image_handler` | Fetch cover as base64 data URI |
+| `saveReadingProgress(fileId, spineIdx, charOffset, currentPage)` | `save_reading_progress_handler` | Persist visual page position |
+| `saveSrPosition(fileId, spineIdx, charOffset, currentPage, wordIdx, mode)` | `save_sr_position_handler` | Persist SR word pointer |
+| `getSettings()` | `get_settings_handler` | Load global settings |
+| `saveSettings(settings)` | `save_settings_handler` | Persist global settings |
 
 ---
 
 ## Navigation Model
 
-Navigation is handled by a single **activeBook: Book | null** state in **App.tsx**.
+A single `activeBook: Book | null` state in `App.tsx` controls the top-level view. No router is used.
 
-- **null** → library view (AppShell + LibraryPage)
-- **non-null** → full-page reading view (ReadingView)
+- `null` → library (AppShell + LibraryPage)
+- non-null → full-page reader (ReadingView)
 
-No router is used. Clicking a book card calls **setActiveBook(book)**. Clicking the back button calls **setActiveBook(null)**.
+Clicking a book card calls `setActiveBook(book)`. The back button in the reader awaits `saveReadingProgress` then calls `setActiveBook(null)`.
+
+### Window Close Handling
+
+`App.tsx` registers a Tauri `onCloseRequested` listener that `preventDefault()`s the close event, awaits `saveReadingProgress` (if a book is open), then calls `getCurrentWindow().close()`. This prevents progress loss on abrupt close.
 
 ---
 
@@ -123,116 +120,85 @@ No router is used. Clicking a book card calls **setActiveBook(book)**. Clicking 
 
 ### ReadingView
 
-Owns all reader state: spineItems, currentSpineIdx, charOffset, htmlContent, isLoadingContent, isLoadingSpine, fontSize.
+State: `spineItems`, `currentSpineIdx`, `charOffset`, `htmlContent`, `isLoadingContent`, `isLoadingSpine`, `fontSize`, `currentPage`, `srState`, `ctxMenu`.
 
 Two effects:
-1. On mount: calls **listSpine** to populate the sidebar.
-2. When currentSpineIdx or charOffset changes: calls **getBookContent** and stores **res.content.content** as htmlContent.
+1. On mount: calls `listSpine` to populate the sidebar
+2. When `currentSpineIdx` or `charOffset` changes: calls `getBookContent`, stores the HTML, and restores the saved visual page
 
-Navigation handlers:
-- **handleSpineSelect(idx)** — sets currentSpineIdx to the clicked index and resets charOffset to 0, causing the content effect to fire.
-- **handleNext** — increments currentSpineIdx by 1, resets charOffset. Called by BookContent when the last page of the current chapter is passed.
-- **handlePrev** — decrements currentSpineIdx by 1, resets charOffset.
+Progress is saved via a debounced `saveReadingProgress` call (500 ms) triggered on page navigation. On back and close it is awaited directly.
+
+### ReadingTopbar
+
+Contains back button, book title, font size controls, and the SR entry toggle (crosshair cursor mode). The crosshair toggle is only visible in the idle SR state. Activating it injects a `<style id="sr-entry-cursor">` into the iframe body to change the cursor. Deactivating it removes the style element.
 
 ### BookContent
 
-Renders the EPUB HTML inside an isolated **iframe**. Automatically switches between two layout modes based on the container's pixel width.
+Renders EPUB HTML inside an isolated iframe via `srcDoc`. Injects reading CSS (Georgia serif, line height, margins) and handles pagination and SR.
 
-**TWO_PAGE_MIN_WIDTH = 600 px** — threshold constant. Above: two-page spread. Below: single-page scroll.
+**Two-page spread mode (container >= 600 px)**
 
----
+Uses CSS multi-column (`column-count: 2`) on the iframe body. Columns flow to the right; the html element clips with `overflow: hidden`. Pages advance by translating `body.style.transform`.
 
-**Two-page spread mode (container ≥ 600 px)**
+Zero-drift invariant: `column-gap` must equal `2 * horizontal-padding` in the same unit. With `padding: 0 2rem` and `column-gap: 4rem`, each page advance equals exactly the viewport width regardless of zoom level.
 
-Uses CSS multi-column (column-count: 2) on the body element. Columns flow freely to the right; the html element clips the visible area with overflow:hidden. Successive column pairs are revealed by translating body.style.transform.
+Page measurement: `totalPages = Math.ceil(body.scrollWidth / viewWidth)`. `viewWidth` is captured in a ref at measurement time and reused for navigation to avoid drift from minor reflows. Two nested `requestAnimationFrame` calls wait for style injection and column layout reflow.
 
-Zero-drift invariant: column-gap must equal exactly 2 times the horizontal padding in the same unit (rem). With padding-left = padding-right = 2rem and column-gap = 4rem:
-
-    pair_advance = 2 * (col_width + 4rem)
-                 = content_width + gap
-                 = (viewport_width - 4rem) + 4rem
-                 = viewport_width
-
-The pair_advance equals the viewport width for any viewport width and any rem resolution. The invariant also holds for column-count: 1 with the same padding and gap values.
-
-CSS applied inside the iframe:
-- **html**: height 100%, overflow hidden (clips the viewport)
-- **body**: height 100% !important, overflow visible !important, column-count 2, column-gap 4rem, padding 2.5rem 2rem
-
-The overflow: visible !important is critical. EPUB stylesheets frequently set body overflow: hidden, which clips body.scrollWidth to equal body.clientWidth and gives totalPages = 1, breaking in-chapter pagination entirely.
-
-Page measurement:
-- Total pages = Math.ceil(body.scrollWidth / viewWidth)
-- viewWidth is captured in viewWidthRef at measurement time and reused in goToPage to avoid drift from minor reflows
-- Two nested requestAnimationFrames wait for style injection and column layout reflow to complete
-
-Page navigation uses a crossfade (opacity 0 → reposition → opacity 1) so both columns switch as a single unit rather than sliding past the viewport edge independently. cancelAnimationFrame prevents stale fade-ins from stacking on rapid navigation.
-
----
+Page transitions use a crossfade (opacity 0 → translate → opacity 1) so both columns flip as a unit.
 
 **Single-page scroll mode (container < 600 px)**
 
-No CSS columns. The body scrolls vertically within the iframe (overflow-y: auto). The user scrolls through chapter content with mouse wheel or touch. totalPages is always 1; navigation is chapter-level only (no in-chapter page buttons).
-
-CSS applied inside the iframe:
-- **html**: height 100%, overflow hidden
-- **body**: height auto !important, overflow-y auto !important, overflow-x hidden !important, padding 1.5rem 1.25rem
-
----
+No CSS columns. Body scrolls vertically. `totalPages` is always 1; navigation is chapter-level only.
 
 **Shared behaviour**
 
-A ResizeObserver on the container div calls refresh() whenever the reading area changes size. refresh() reads the container's current clientWidth to determine isTwoPage, injects the appropriate CSS, and recomputes totalPages. Switching between modes (resize crossing 600 px) resets to page 0 and clears any leftover body transform.
+A `ResizeObserver` on the container calls `refresh()` on size changes, which re-evaluates `isTwoPage`, re-injects CSS, and recomputes `totalPages`. Crossing the 600 px threshold resets to page 0.
 
-When the html prop changes (new chapter or new chunk), a useEffect immediately resets currentPage and totalPages. The iframe remounts via key={html} and handleIframeLoad recomputes the layout once the new content has loaded.
+When the `html` prop changes (new chapter), a `useEffect` resets page state. The iframe remounts via `key={html}`.
 
-Navigation button labels:
-- Prev Page (when on page > 0) / Prev Chapter (when on page 0)
-- Next Page (when not on last page) / Next Chapter (when on last page)
-- The pg X/Y counter is hidden when totalPages = 1 (single-page scroll mode)
+**SR word tokenisation**
+
+When SR entry cursor mode is active, `handleIframeLoad` tokenises all text nodes in the iframe into `<span data-wi="N">` word spans and attaches a click listener. Clicking a word calls `onSrEntryWordClick(wordIdx)` with the word's index.
+
+`onSrEntryWordClick` shows the inline/focus picker menu (`ctxMenu`) positioned at the clicked word's bounding rect (as a `position: fixed` div updated via a direct DOM ref — no re-renders). The menu is rendered in `ReadingView`.
 
 ### SpineList
 
-Displays the EPUB spine in a left sidebar. The **formatLabel** function resolves the best available display label for each spine item using priority order:
+Displays the EPUB spine as a scrollable sidebar. `formatLabel` resolves the best display label per item in priority order:
 
-1. **title** — from the EPUB NCX / NAV table of contents (exact chapter name, e.g. "Chapter 3: The Journey"). Used when available.
-2. **href** filename — the actual file path inside the EPUB archive (e.g. OEBPS/Text/chapter03.xhtml is more descriptive than the manifest ID "idx").
-3. **idref** — the raw manifest item ID, used only as a last resort.
+1. `title` from the NCX/NAV TOC (exact chapter name)
+2. `href` basename — strips directory prefix, extension, EPUB suffix/prefix patterns, replaces separators, capitalises
+3. `idref` — raw manifest ID, used as last resort
 
-For option 2 and 3, the filename is cleaned:
-- Take the final path segment (strip directory prefix)
-- Strip file extension (.xhtml, .html, .xml)
-- Strip trailing EPUB suffix patterns such as _xhtml, _html, _xml
-- Strip leading EPUB prefix patterns such as x_, xhtml_, html_
-- Replace underscores and hyphens with spaces, capitalize each word
-
-Clicking any item calls **onSelect(idx)** which maps to **handleSpineSelect** in ReadingView, jumping directly to the start of that chapter (spine_idx = clicked, char_offset = 0).
+Clicking an item calls `onSelect(idx)`, which sets `currentSpineIdx` to the clicked index and resets `charOffset` to 0.
 
 ---
 
 ## Design System
 
-Custom Tailwind color tokens defined in **tailwind.config.js** (Foliate light theme):
+Custom Tailwind color tokens in `tailwind.config.js` (Adwaita light palette):
 
-- **app-bg** #f6f5f4 — page background
-- **app-surface** #ffffff — cards, modals, topbars
-- **app-card** #ffffff — book cards
-- **app-hover** #f0eeec — hover state backgrounds
-- **app-border** #deddda — borders and dividers
-- **fg-primary** #1c1c1c — primary text
-- **fg-secondary** #5c5c5c — secondary text
-- **fg-muted** #9a9a9a — muted / label text
-- **accent** #3584e4 — Adwaita blue, used for active states, links, CTA buttons
-- **accent-hover** #2269c4 — darker accent for hover
-- **accent-muted** rgba(53,132,228,0.12) — light accent tint for selected states
+| Token | Value | Usage |
+|---|---|---|
+| `app-bg` | #f6f5f4 | Window / page background |
+| `app-surface` | #ffffff | Header bar, modals |
+| `app-card` | #ffffff | Book cards |
+| `app-hover` | #f0eeec | Hover state backgrounds |
+| `app-border` | #deddda | Borders and dividers |
+| `fg-primary` | #1c1c1c | Primary text |
+| `fg-secondary` | #5c5c5c | Secondary text |
+| `fg-muted` | #9a9a9a | Placeholder / label text |
+| `accent` | #3584e4 | Adwaita blue, CTAs, active states |
+| `accent-hover` | #2269c4 | Darker accent on hover |
+| `accent-muted` | rgba(53,132,228,0.12) | Selected state tint |
 
 ---
 
 ## CSS Animations
 
-Defined in **src/index.css**:
+Defined in `src/index.css`:
 
-- **toast-in** — slides the ErrorToast down from above and fades it in
-- **modal-in** — scales the ImportModal in from 96% and fades it in
+- **toast-in** — slides ErrorToast down from above with fade-in
+- **modal-in** — scales ImportModal from 96% with fade-in
 
-Both are applied via the style attribute on mount rather than a class toggle so they always replay when the element is first rendered.
+Both are applied via inline style on mount so they always replay on first render rather than depending on class toggle timing.

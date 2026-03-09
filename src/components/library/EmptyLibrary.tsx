@@ -2,9 +2,7 @@ interface EmptyLibraryProps {
   onImport: () => void;
 }
 
-/**
- * Shown on the home page when the library has no books yet.
- */
+
 export function EmptyLibrary({ onImport }: EmptyLibraryProps) {
   return (
     <div className="flex-1 flex flex-col items-center justify-center gap-5 px-8 py-20 text-center">

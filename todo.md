@@ -9,3 +9,12 @@
 - [ ] security: validate and sanitize all incomming requests
 - [x] thumbnail image is not working, problem with the metadata extraction in rust!
 - [ ] text zoom also needs to be stored in the database and restored
+
+
+- [ ] upload directly dreag and drop
+- [ ] single side book
+- [ ] cmd + and cmd -
+- [ ] space bar pause
+- [ ] hanging while zooming in inline mode 
+- [ ] persistant in library
+- [ ] delete book

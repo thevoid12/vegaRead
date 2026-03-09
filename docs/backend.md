@@ -1,132 +1,193 @@
-# vegaRead Backend Documentation
+# vagaread Backend Documentation
 
 ## Overview
 
-The backend is a Tauri 2 Rust application. All business logic is in the **src-tauri/src/** directory. The frontend communicates with the backend exclusively through Tauri commands registered in **lib.rs**.
+The backend is a Tauri 2 Rust application. All business logic lives in `src-tauri/src/`. The frontend communicates with the backend exclusively through Tauri IPC commands registered in `lib.rs`.
 
 ---
 
 ## Technology Stack
 
-- **Tauri 2** for the desktop application shell and IPC
-- **Rust** (async with tokio runtime)
-- **sqlx** for async SQLite access
-- **epub** crate for parsing EPUB files
-- **uuid** crate for generating and handling UUIDs
-- **serde / serde_json** for serialisation of all IPC return values
-- **tauri-plugin-dialog** for the native file picker (called from the frontend)
-- **tauri-plugin-opener** for opening files with the OS default application
+- **Tauri 2** — desktop shell, IPC, window management
+- **Rust** with async/await via the Tokio runtime (provided by Tauri)
+- **sqlx** — async SQLite access with a connection pool
+- **epub** crate — EPUB file parsing
+- **uuid** — UUID v4 generation and serde support
+- **serde / serde_json** — serialisation for all IPC return values
+- **tauri-plugin-log** — structured logging to stdout and platform log file
+- **tauri-plugin-dialog** — native OS file picker
+- **tauri-plugin-opener** — open files with OS default application
 
 ---
 
 ## File Overview
 
 ```
-src-tauri/src/
-  lib.rs          — Tauri app builder, plugin registration, invoke_handler registration
-  handlers.rs     — all #[tauri::command] functions and shared core logic
-  models.rs       — Rust structs that serialise to JSON for the frontend
-  epub_util.rs    — EPUB parsing: metadata, spine, paginated content
-  db.rs           — SQLite queries (create, list, get by id, update)
-  util.rs         — file system utilities (copy to app data directory)
-  errors.rs       — ApplicationError type and error code constants
+src-tauri/
+  src/
+    lib.rs          — Tauri builder, plugin registration, panic hook, invoke_handler
+    handlers.rs     — all #[tauri::command] functions and shared internal logic
+    models.rs       — request/response structs, validation newtypes, DB model structs
+    db.rs           — all SQLite operations (no raw SQL outside this file)
+    epub_util.rs    — EPUB parsing: metadata, spine, cover image, paginated content
+    util.rs         — file system helpers (copy to app data directory)
+    errors.rs       — ApplicationError type and error code constants
+  migrations/
+    schema.sql      — initial table creation (run once on new DB)
+    queries.rs      — SQL query string constants (included into the binary)
 ```
 
 ---
 
-## Registered Tauri Commands
+## Startup (lib.rs)
 
-All commands are registered in **lib.rs** inside the **invoke_handler** macro. Each command corresponds to a public async function in **handlers.rs**.
+On launch, `lib.rs` runs the Tauri builder in this order:
+
+1. Registers `tauri_plugin_log` (stdout + platform log file at `vagaread`)
+2. Registers `tauri_plugin_opener` and `tauri_plugin_dialog`
+3. In `.setup`: calls `db::init_db` (creates DB and schema if first launch), injects the pool into managed state, and installs a `std::panic::set_hook` that logs panics via `log::error!` before the process aborts
+4. Registers all IPC command handlers via `invoke_handler`
+
+---
+
+## Registered Commands
+
+All commands are public async functions in `handlers.rs`, registered in `lib.rs`.
 
 ### show_home_page_handler
 
-**Frontend call:** fetchAllBooks()
-**Returns:** Vec of vagaread structs (serialised as a JSON array)
+**Frontend:** `fetchAllBooks()`
+**Returns:** `Vec<Vagaread>`
 
-Calls **db::list_all_vb_records** and returns all non-deleted book records. This is the first call made when the app opens.
+Returns all non-deleted book records from the database. Called on app start and after every import.
 
 ### upload_file_handler
 
-**Frontend call:** uploadFile(filePath)
-**Parameters:** file_path: String
-**Returns:** Content_response
+**Frontend:** `uploadFile(filePath)`
+**Parameters:** `file_path: String`
+**Returns:** `ContentResponse`
 
-Core steps (executed in **load_file_core**):
-1. Copies the EPUB to the app data directory via **util::copy_to_app_directory**.
-2. Extracts metadata via **epub_util::extract_epub_metadata** and parses it to serde_json::Value.
-3. Creates a new **vagaread** record in the database via **db::create_record**.
-4. Calls **epub_util::get_paginated_content** with spine_idx=0 and char_offset=0 to return the first chunk of content.
+Executed in `load_file_core`:
+1. Copies the EPUB to the app data directory (`util::copy_to_app_directory`)
+2. Extracts metadata (`epub_util::extract_epub_metadata`), parses to `serde_json::Value`
+3. Inserts a new `vagaread` record with a fresh UUID v4
+4. Returns the first content chunk (spine 0, offset 0)
 
 ### get_ebook_content_handler
 
-**Frontend call:** getBookContent(fileId, spineIdx, charOffset)
-**Parameters:** file_id: uuid::Uuid, spine_idx: usize, char_offset: usize
-**Returns:** book_response
+**Frontend:** `getBookContent(fileId, spineIdx, charOffset)`
+**Parameters:** `file_id: Uuid`, `spine_idx: usize`, `char_offset: usize`
+**Returns:** `BookResponse`
 
-Fetches the database record for the given file_id to get the internal file path, then calls **epub_util::get_paginated_content** to extract the HTML for the requested spine item starting at the given character offset.
+Fetches the DB record to resolve the file path, then calls `epub_util::get_paginated_content`. If the requested position differs from the saved position, saves the new position fire-and-forget via `update_ebook_page_state_async`. Returns the saved visual page number when restoring a previously visited position, or 0 when navigating to a new chunk.
 
 ### list_spine_handler
 
-**Frontend call:** listSpine(fileId)
-**Parameters:** file_id: uuid::Uuid
-**Returns:** Vec of SpineItemResponse
+**Frontend:** `listSpine(fileId)`
+**Parameters:** `file_id: Uuid`
+**Returns:** `Vec<SpineItemResponse>`
 
-Fetches the database record by ID to get the internal file path, then calls **epub_util::get_epub_spine** to extract the ordered spine from the EPUB.
+Resolves the file path from the DB, then calls `epub_util::get_epub_spine`.
+
+### get_cover_image_handler
+
+**Frontend:** `getCoverImage(fileId)`
+**Parameters:** `file_id: Uuid`
+**Returns:** `Option<String>`
+
+Returns the cover image as a `data:image/...;base64,...` data URI, or `null` if the EPUB has no cover. Calls `epub_util::extract_cover_as_data_uri`.
+
+### save_reading_progress_handler
+
+**Frontend:** `saveReadingProgress(fileId, spineIdx, charOffset, currentPage)`
+**Parameters:** `file_id: Uuid`, `spine_idx: usize`, `char_offset: usize`, `current_page: usize`
+**Returns:** `()`
+
+Persists spine index, character offset, and visual page number for within-chunk page turns. Called debounced from the frontend on page navigation and awaited before the back button and window close actions complete.
+
+### save_sr_position_handler
+
+**Frontend:** `saveSrPosition(fileId, spineIdx, charOffset, currentPage, wordIdx, mode)`
+**Parameters:** `file_id: Uuid`, `spine_idx: usize`, `char_offset: usize`, `current_page: usize`, `word_idx: usize`, `mode: String`
+**Returns:** `()`
+
+Saves both the reading position and the SR word pointer atomically in two sequential DB writes: `update_vb_record` then `update_sr_position`. Called on SR pause, stop, back, and window close.
+
+### get_settings_handler
+
+**Frontend:** `getSettings()`
+**Returns:** `AppSettings`
+
+Reads the `settings_json` column from the sentinel row (`id = 'app_settings'`). Returns `AppSettings::default()` if no sentinel row exists yet (first launch).
+
+### save_settings_handler
+
+**Frontend:** `saveSettings(settings)`
+**Parameters:** `SaveSettingsRequestRaw` (wpm, font sizes, colors, focus mode)
+**Returns:** `()`
+
+Validates all fields, serialises to JSON, and upserts the sentinel settings row.
 
 ---
 
 ## Models (models.rs)
 
-### vagaread
+### Request validation
 
-One database record per imported book.
+Raw request structs (`*Raw`) are the Tauri deserialization targets. Each is converted to a validated struct via a `validate()` method that returns `ApplicationError` on bad input. Validated structs use newtypes (`SpineIndex`, `CharOffset`, `CurrentPage`, `WordIdx`, `SrMode`, `FilePath`) to enforce range and format constraints.
 
-Fields:
-- **vagaread_id** — uuid::Uuid, primary key
-- **internal_fp** — String, absolute path to the EPUB inside the app data directory
-- **meta_data** — serde_json::Value, the full EPUB metadata as a JSON object
-- **current_read_idx** — usize, character offset within current_spine (reading progress)
-- **current_spine** — usize, spine index of the last read position
-- **is_deleted** — bool, soft-delete flag
+### Vagaread
 
-### Content_response
+One DB record per imported book, returned to the frontend by `show_home_page_handler`.
 
-Returned by **get_paginated_content** in epub_util.rs.
+| Field | Type | Description |
+|---|---|---|
+| `vagaread_id` | `Uuid` | Primary key |
+| `internal_fp` | `String` | Absolute path to EPUB in app data directory |
+| `meta_data` | `serde_json::Value` | Full EPUB metadata as a JSON object |
+| `current_read_idx` | `usize` | Character offset within current spine (saved progress) |
+| `current_spine` | `usize` | Spine index of last read position |
+| `current_page` | `usize` | Visual (CSS column) page within the current chunk |
+| `sr_word_idx` | `usize` | Word index within chunk where SR was last paused |
+| `sr_mode` | `String` | `"inline"` or `"focus"` |
+| `is_deleted` | `bool` | Soft-delete flag |
 
-Fields:
-- **content** — String, the EPUB chapter HTML for this chunk
-- **spine_idx** — usize, the spine index to use on the next call (may advance past the current chapter if it fitted within PAGINATE_CHAR)
-- **next_char_offset** — usize, the character offset within spine_idx to use on the next call
+### ContentResponse
 
-### book_response
+Returned by `epub_util::get_paginated_content`.
 
-Wraps Content_response with the book identity. Returned by **get_ebook_content_handler**.
+| Field | Description |
+|---|---|
+| `content` | Raw EPUB chapter HTML for this chunk |
+| `spine_idx` | Spine index for the next call |
+| `next_char_offset` | Character offset within `spine_idx` for the next call |
+| `page_size` | Always `PAGINATE_CHAR` (10,000) — tells the frontend the step size for Prev |
+| `current_page` | Visual page to restore to (0 when navigating, saved value when restoring) |
 
-Fields:
-- **vagaread_id** — uuid::Uuid
-- **content** — Content_response
+### BookResponse
 
-The frontend accesses the HTML via **res.content.content**.
+Wraps `ContentResponse` with the book UUID. Returned by `get_ebook_content_handler`.
 
 ### SpineItemResponse
 
-One item from the EPUB spine. Returned as a Vec by **list_spine_handler**.
+One item from the EPUB spine.
 
-Fields:
-- **idref** — String, references the manifest item id
-- **id** — Option<String>, the spine itemref id attribute (often absent)
-- **properties** — Option<String>, EPUB properties (e.g. cover-image)
-- **linear** — bool, whether this item is part of the linear reading order
+| Field | Description |
+|---|---|
+| `idref` | Manifest item ID |
+| `href` | Resolved file path within the EPUB archive |
+| `title` | Human-readable title from the NCX/NAV table of contents, if matched |
+| `id` | `itemref` id attribute (often absent) |
+| `properties` | EPUB properties attribute |
+| `linear` | Whether this item is in the linear reading order |
 
-### update_vr
+### AppSettings
 
-Internal struct (not yet used in an active handler). Holds the fields needed to update reading progress for a record.
-
-Fields: vagaread_id, current_read_idx, current_spine.
+Global reader settings stored in the DB sentinel row. Defaults: wpm=250, font_size=18, focus_font_size=72, inline_highlight_color=#fbbf24, focus_word_color=#000000, focus_background_mode=tracking.
 
 ### Constants
 
-**PAGINATE_CHAR** = 1_000_000 — the maximum number of characters returned in a single content chunk. At this size essentially all EPUB chapters fit in a single call.
+- `PAGINATE_CHAR = 10_000` — maximum characters per content chunk
 
 ---
 
@@ -134,48 +195,34 @@ Fields: vagaread_id, current_read_idx, current_spine.
 
 ### extract_epub_metadata(fp)
 
-Opens the EPUB file and iterates over **doc.metadata** (a Vec of MetadataItem). Groups values by property name into a **HashMap<String, Vec<String>>** and serialises it to a JSON string.
+Iterates `doc.metadata` and groups values into a `HashMap<String, Vec<String>>` by property name, then serialises to JSON.
 
 ### get_epub_spine(fp)
 
-Opens the EPUB file and maps **doc.spine** (a Vec of SpineItem from the epub crate) into a Vec of **SpineItemResponse**.
+Maps `doc.spine` items into `Vec<SpineItemResponse>`. Resolves each `idref` to an `href` via the manifest resources map, and matches the `href` against the NCX/NAV TOC to find the chapter title. Filename matching falls back to basename comparison when full path does not match.
+
+### extract_cover_as_data_uri(fp)
+
+Finds the cover item in the EPUB manifest (by `cover-image` property or `cover` id convention), reads the raw bytes, and encodes them as a base64 data URI. Returns `None` if no cover is found.
 
 ### get_paginated_content(fp, spine_idx, char_offset, chunk_size)
 
-Opens the EPUB file, resolves the spine item at spine_idx to a manifest idref, then calls **doc.get_resource_str** to get the raw XHTML string for that chapter.
-
-It then takes a slice of characters starting at char_offset of length chunk_size:
-- If the remainder of the chapter fits within chunk_size, spine_idx is incremented and char_offset is reset to 0.
-- Otherwise, char_offset is advanced by chunk_size and spine_idx stays the same.
-
-Returns a **Content_response** with the HTML slice and the updated position.
+Opens the EPUB, resolves `spine_idx` to a manifest resource, and gets the raw XHTML. Takes a `chunk_size`-character slice starting at `char_offset`. If the remainder fits within `chunk_size`, advances `spine_idx` by 1 and resets offset to 0. Returns a `ContentResponse`.
 
 ---
 
 ## Error Handling
 
-All handlers return **Result<T, ApplicationError>**. **ApplicationError** is a serialisable struct with fields **code** (a string constant from errors::codes) and **message** (Option<String>). Tauri serialises errors to JSON and delivers them as rejected promises on the frontend.
+All handlers return `Result<T, ApplicationError>`. `ApplicationError` is serialisable with fields `code: &str` and `message: Option<String>`. Tauri delivers errors as rejected promises on the frontend.
 
-Error codes defined in **errors::codes**:
-- **DATABASE_ERROR** — SQLite operation failed
-- **EPUB_ERROR** — EPUB file could not be opened or parsed
-- Additional codes as needed
-
----
-
-## Plugin Registration (lib.rs)
-
-```
-.plugin(tauri_plugin_opener::init())
-.plugin(tauri_plugin_dialog::init())
-```
-
-The dialog plugin enables the native file picker used in the Import modal on the frontend. The opener plugin is registered for future use (e.g. opening the app data folder in Finder / Files).
+Error codes (`errors::codes`):
+- `DATABASE_ERROR` — SQLite operation failed
+- `EPUB_ERROR` — EPUB could not be opened or parsed
+- `VALIDATION_ERROR` — request field failed validation
+- `DIRECTORY_ERROR` — app data directory could not be resolved or created
 
 ---
 
-## Future Work
+## Panic Handling
 
-- Call **db::update_vb_record** (or a new handler) whenever the user advances to a new spine item or page, to persist reading progress.
-- Extract EPUB cover images from the manifest and serve them to the frontend to replace the gradient placeholder.
-- Implement the speed reader (RSVP word-by-word) handler.
+A `std::panic::set_hook` is installed in `lib.rs` after the logger initialises. Any panic logs via `log::error!` before the process aborts. Panics in Tokio-spawned tasks are caught by the runtime and do not propagate to the main thread.

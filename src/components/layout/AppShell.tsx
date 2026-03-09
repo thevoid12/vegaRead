@@ -5,10 +5,6 @@ interface AppShellProps {
   children: ReactNode;
 }
 
-/**
- * Root application shell — headerbar + content area.
- * Modelled after Foliate's window layout: compact dark header, scrollable body.
- */
 export function AppShell({ onOpenImport, children }: AppShellProps) {
   return (
     <div className="flex flex-col h-full bg-app-bg text-fg-primary font-sans antialiased">

@@ -10,58 +10,18 @@ interface BookContentProps {
   hasPrev: boolean;
   currentChapterIdx: number;
   totalChapters: number;
-  /** When defined, inline speed-reading is active and this word index should be highlighted. */
   srWordIdx?: number;
-  /** Background colour for the highlighted word (default: amber #fbbf24). */
   srHighlightColor?: string;
-  /**
-   * Called when the user right-clicks a word inside the iframe.
-   * wordIdx is the zero-based word index matching wrapWordsInSpans / extractWords.
-   * x / y are viewport (fixed) coordinates for positioning the context menu.
-   */
+
   onWordRightClick?: (wordIdx: number, x: number, y: number) => void;
-  /** Called on any left-click inside the iframe (used to close context menus). */
   onIframeClick?: () => void;
-  /** Visual page to navigate to after the content loads (0 = start). */
   initialPage?: number;
-  /** Called whenever the visible page changes (goToPage or after refresh). */
   onPageChange?: (page: number) => void;
-  /**
-   * When set to 'inline' or 'focus', the iframe shows a crosshair cursor and
-   * left-clicking any word fires onSrWordClick with that word's index.
-   * The wrapping HTML (with data-sr spans) must already be in the `html` prop.
-   */
   srEntryMode?: false | string;
-  /** Called when user clicks a word while srEntryMode is active. */
   onSrWordClick?: (wordIdx: number) => void;
 }
-
-/**
- * Container width (px) below which single-page vertical-scroll mode is used
- * instead of the two-page CSS column spread.
- */
 const TWO_PAGE_MIN_WIDTH = 600;
 
-/**
- * CSS injected into the EPUB iframe.
- *
- * Two modes:
- *
- * ── Two-page spread (container ≥ 600 px) ───────────────────────────────────
- * Uses CSS multi-column (column-count: 2) on body. Columns flow to the right;
- * html clips the visible area. body.style.transform reveals successive pairs.
- *
- * Zero-drift invariant: column-gap = 2 × horizontal-padding in the same unit.
- *   pair_advance = 2·(col_width + gap) = content_width + gap
- *                = (W − 4rem) + 4rem = W  for any W
- * body must NOT be clipped — we force overflow: visible !important to override
- * any EPUB stylesheet that sets overflow: hidden on body, which would make
- * body.scrollWidth = body.clientWidth and give totalPages = 1.
- *
- * ── Single-page scroll (container < 600 px) ────────────────────────────────
- * No CSS columns. body scrolls vertically inside the iframe (overflow-y: auto).
- * totalPages is always 1; navigation is chapter-level only.
- */
 function buildReadingStyles(fontSize: number, isTwoPage: boolean): string {
   const common = `
     img { max-width: 100%; height: auto; display: block; margin: 1em auto; break-inside: avoid; }
@@ -108,11 +68,7 @@ function buildReadingStyles(fontSize: number, isTwoPage: boolean): string {
     `;
   }
 
-  // Single-page scroll mode — no columns, body scrolls vertically.
-  // height: 100% !important is required: the body must be a fixed-height scroll
-  // container equal to the iframe viewport. With height: auto the body grows to
-  // fit all content (scrollHeight = clientHeight) and overflow-y: auto has no
-  // effect — there is nothing to scroll.
+
   return `
     html { height: 100%; overflow: hidden; background: #fefcf9; }
     body {
@@ -133,18 +89,9 @@ function buildReadingStyles(fontSize: number, isTwoPage: boolean): string {
   `;
 }
 
-// Tags whose text content should not be counted as readable words —
-// must match the SKIP_TAGS set in speedReader.ts.
 const SR_SKIP_TAGS = new Set(['SCRIPT', 'STYLE', 'HEAD', 'META', 'LINK', 'TITLE', 'NOSCRIPT']);
 
-/**
- * Returns the zero-based word index at (x, y) inside `doc`, matching the
- * indices produced by wrapWordsInSpans / extractWords.
- *
- * Uses WebKit's caretRangeFromPoint to locate the character, then counts
- * words across text nodes (skipping SR_SKIP_TAGS) up to that point.
- * Returns null when the point is not over readable text.
- */
+
 function getWordIndexAtPoint(doc: Document, x: number, y: number): number | null {
   type DocWithCaret = Document & { caretRangeFromPoint?: (x: number, y: number) => Range | null };
   const range = (doc as DocWithCaret).caretRangeFromPoint?.(x, y);
@@ -161,12 +108,10 @@ function getWordIndexAtPoint(doc: Document, x: number, y: number): number | null
     },
   });
 
-  // Sum word counts in all text nodes that come before the clicked node
   while (walker.nextNode() && walker.currentNode !== clickedNode) {
     wordIdx += (walker.currentNode.textContent ?? '').split(/\s+/).filter(Boolean).length;
   }
 
-  // Add words before the cursor within the clicked text node
   const before = (clickedNode.textContent ?? '').slice(0, range.startOffset);
   wordIdx += before.split(/\s+/).filter(Boolean).length;
 
@@ -194,17 +139,11 @@ export function BookContent({
 }: BookContentProps) {
   const iframeRef      = useRef<HTMLIFrameElement>(null);
   const containerRef   = useRef<HTMLDivElement>(null);
-  // Width snapshot from the last refresh — used in goToPage to avoid drift
-  // from minor iframe reflows between refresh and navigation.
+
   const viewWidthRef   = useRef<number>(0);
-  // RAF id for the pending fade-in so rapid navigation can cancel it.
   const animFrameRef   = useRef<number>(0);
-  // True while refresh() is still computing totalPages inside its RAFs.
-  // Prevents a click during that window from firing chapter navigation before
-  // totalPages has been updated from the default 1.
+
   const isMeasuringRef = useRef<boolean>(false);
-  // Stable refs for callbacks — updated every render so event handlers
-  // attached in handleIframeLoad never capture stale values.
   const onWordRightClickRef = useRef(onWordRightClick);
   const onIframeClickRef    = useRef(onIframeClick);
   const onPageChangeRef     = useRef(onPageChange);
@@ -214,13 +153,8 @@ export function BookContent({
   onPageChangeRef.current     = onPageChange;
   onSrWordClickRef.current    = onSrWordClick;
 
-  // Incremented on every iframe load — forces CSS injection effects to re-run
-  // after a remount, since the new document is blank until the load event fires.
   const [iframeVersion, setIframeVersion] = useState(0);
 
-  // Cursor CSS + entry-mode click listener.
-  // Both are managed together so the click handler is always set up when the
-  // cursor is active, guaranteed to run after the iframe loads via iframeVersion.
   useEffect(() => {
     const doc = iframeRef.current?.contentDocument;
     if (!doc?.head) return;
@@ -230,7 +164,6 @@ export function BookContent({
       return;
     }
 
-    // Inject cursor + hover CSS
     let styleEl = doc.getElementById('sr-entry-cursor') as HTMLStyleElement | null;
     if (!styleEl) {
       styleEl = doc.createElement('style');
@@ -242,7 +175,6 @@ export function BookContent({
       [data-sr]:hover { background: rgba(59,130,246,0.18) !important; border-radius: 2px; }
     `;
 
-    // Entry-mode click: find the clicked data-sr span and fire onSrWordClick
     function handleEntryClick(e: MouseEvent) {
       const srSpan = (e.target as Element).closest?.('[data-sr]') as HTMLElement | null;
       if (!srSpan) return;
@@ -256,15 +188,10 @@ export function BookContent({
       doc.removeEventListener('click', handleEntryClick);
       doc.getElementById('sr-entry-cursor')?.remove();
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [srEntryMode, iframeVersion]);
 
-  // Holds the page to navigate to after the next refresh (one-shot, cleared after use).
-  // pendingInitialPageRef: set from the initialPage prop (backend restore).
-  // pendingKeepPageRef: set before font-size refresh to navigate back to current page.
   const pendingInitialPageRef = useRef(0);
   const pendingKeepPageRef    = useRef(0);
-  // Always reflects the latest currentPage so effects can read it without stale closures.
   const currentPageRef = useRef(0);
 
   const [currentPage,   setCurrentPage]   = useState(0);
@@ -272,28 +199,10 @@ export function BookContent({
 
   currentPageRef.current = currentPage;
 
-  // When initialPage prop changes, store it for use after the next refresh.
   useEffect(() => {
     pendingInitialPageRef.current = initialPage ?? 0;
   }, [initialPage]);
 
-  /**
-   * Inject reading CSS and — for two-page mode — compute the total page count.
-   *
-   * isTwoPage is derived from the container's current pixel width so the
-   * column-count in CSS and the page measurement are always consistent.
-   *
-   * Single-page mode: totalPages is fixed at 1; no measurement needed.
-   *
-   * Two-page mode:
-   *   pages = ceil(body.scrollWidth / viewWidth)
-   *   body.scrollWidth reflects all off-screen columns because we force
-   *   overflow: visible !important — overriding any EPUB CSS that would
-   *   otherwise clip the scroll dimension and give a false pages = 1.
-   *
-   * Two nested RAFs wait for the style injection to take effect and for the
-   * column layout reflow to complete before measuring scrollWidth.
-   */
   const refresh = useCallback(() => {
     const doc = iframeRef.current?.contentDocument;
     if (!doc?.head || !doc?.body) return;
@@ -310,7 +219,6 @@ export function BookContent({
     styleEl.textContent = buildReadingStyles(fontSize, isTwoPage);
 
     if (!isTwoPage) {
-      // Vertical scroll mode: clear any leftover column transform and fix at 1 page
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
       doc.body.style.transition = 'none';
       doc.body.style.transform  = 'none';
@@ -322,11 +230,8 @@ export function BookContent({
       return;
     }
 
-    // Two-page column mode: measure after layout reflow.
-    // Mark as measuring so navigation clicks during this window are ignored.
     isMeasuringRef.current = true;
 
-    // Reset body to position 0 before measuring so probe offsets are correct.
     doc.body.style.transition = 'none';
     doc.body.style.transform  = 'translateX(0px)';
     doc.body.style.opacity    = '1';
@@ -337,16 +242,7 @@ export function BookContent({
         if (!viewWidth) { isMeasuringRef.current = false; return; }
         viewWidthRef.current = viewWidth;
 
-        // Probe element at end of body: its offsetLeft (relative to its offset
-        // parent) tells us which column it landed in. This is more reliable than
-        // body.scrollWidth which some WebKit builds report as clientWidth when
-        // overflow: visible is set on body.
-        //
-        // offsetLeft is unaffected by CSS transforms and overflow clipping, so
-        // it gives the true layout position regardless of the current transform.
-        //
-        // Probe formula: pages = floor(probe.offsetLeft / viewWidth) + 1
-        // because each page starts at exactly k * viewWidth (zero-drift invariant).
+        
         const probe = doc.createElement('div');
         probe.style.cssText = 'height:0;width:0;break-inside:avoid;visibility:hidden;';
         doc.body.appendChild(probe);
@@ -364,17 +260,12 @@ export function BookContent({
     });
   }, [fontSize]);
 
-  // Run refresh when the iframe loads new content.
-  // Also bump iframeVersion so CSS injection effects (highlight, cursor) re-run
-  // against the freshly loaded document.
   const handleIframeLoad = useCallback(() => {
     refresh();
     setIframeVersion(v => v + 1);
   }, [refresh]);
 
-  // After totalPages is updated (after refresh), navigate to the pending page.
-  // Priority: pendingInitialPageRef (backend restore) > pendingKeepPageRef (font-size change).
-  // Both are one-shot and cleared after use.
+ 
   useEffect(() => {
     const fromInitial = pendingInitialPageRef.current;
     const fromKeep    = pendingKeepPageRef.current;
@@ -382,34 +273,21 @@ export function BookContent({
     pendingKeepPageRef.current    = 0;
     const target = fromInitial > 0 ? fromInitial : fromKeep;
     if (target > 0 && totalPages > 1) {
-      // goToPage is declared below but defined before this effect runs at runtime
-      // (effects fire asynchronously after all hooks have executed in the render).
       goToPage(Math.min(target, totalPages - 1));
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [totalPages]);
 
-  // Attach right-click, click, and SR entry mode listeners to the iframe's content document.
-  //
-  // Strategy: use the iframe *element*'s load event (not React's onLoad prop)
-  // so we capture the exact moment the new document is ready. We also try
-  // immediately in case the iframe is already loaded when the effect runs.
-  //
-  // We use mousedown(button=2) to detect the clicked word and open our custom
-  // menu, then contextmenu to call e.preventDefault() (suppresses the native
-  // browser menu when the click was over a word).
+  
   useEffect(() => {
     const iframe = iframeRef.current;
     if (!iframe) return;
 
-    // Whether the last right-mousedown found a readable word
     let rightClickHasWord = false;
 
     function attach() {
       const doc = iframe!.contentDocument;
       if (!doc?.body) return;
 
-      // Right-mousedown: find word + open custom menu
       doc.addEventListener('mousedown', (e: MouseEvent) => {
         if (e.button !== 2) return;
         rightClickHasWord = false;
@@ -418,7 +296,6 @@ export function BookContent({
         if (wordIdx === null) return;
 
         rightClickHasWord = true;
-        // Clear text selection so the OS "Copy" option won't appear
         doc.getSelection()?.removeAllRanges();
 
         const rect = iframe!.getBoundingClientRect();
@@ -429,12 +306,10 @@ export function BookContent({
         );
       });
 
-      // Suppress native context menu only when we found a word
       doc.addEventListener('contextmenu', (e: MouseEvent) => {
         if (rightClickHasWord) e.preventDefault();
       });
 
-      // Left-click: close context menu (entry-mode word clicks handled separately)
       doc.addEventListener('click', () => {
         onIframeClickRef.current?.();
       });
@@ -446,10 +321,7 @@ export function BookContent({
     return () => iframe.removeEventListener('load', attach);
   }, [html]); // re-run when html changes (iframe remounts)
 
-  // Re-inject styles and recompute pages when font size changes.
-  // Capture the current page first so useEffect([totalPages]) can navigate back
-  // to it after the refresh resets currentPage to 0.
-  // pendingInitialPageRef takes priority — don't overwrite a pending backend restore.
+
   useEffect(() => {
     if (pendingInitialPageRef.current === 0) {
       pendingKeepPageRef.current = currentPageRef.current;
@@ -457,15 +329,12 @@ export function BookContent({
     refresh();
   }, [refresh]);
 
-  // Reset page state immediately when the chapter html prop changes.
-  // The iframe remounts (key={html}), so stale page state would flash briefly
-  // without this guard.
+
   useEffect(() => {
     setCurrentPage(0);
     setTotalPages(1);
   }, [html]);
 
-  // Recompute pages and column mode when the reading area is resized
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -476,12 +345,7 @@ export function BookContent({
     return () => ro.disconnect();
   }, [refresh]);
 
-  /**
-   * Navigate to page N with a crossfade so both columns switch as a unit.
-   * Instantly jumps to the new position (invisible) then fades in, so neither
-   * column slides past the viewport edge independently.
-   * cancelAnimationFrame prevents stale fade-ins from stacking on rapid taps.
-   */
+
   const goToPage = useCallback((page: number) => {
     const doc = iframeRef.current?.contentDocument;
     if (!doc?.body) return;
@@ -504,10 +368,6 @@ export function BookContent({
     onPageChangeRef.current?.(page);
   }, []);
 
-  // ── Inline speed-reader word highlight ──────────────────────────────────────
-  // goToPage must be declared before this effect.
-  // Uses offsetLeft (unaffected by CSS transforms) for two-page column mode —
-  // the same technique used in refresh() for page measurement.
   useEffect(() => {
     const doc = iframeRef.current?.contentDocument;
     if (!doc?.head) return;
@@ -541,13 +401,10 @@ export function BookContent({
     } else {
       el.scrollIntoView({ block: 'center', behavior: 'smooth' });
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [srWordIdx, srHighlightColor, currentPage, goToPage, iframeVersion]);
 
   const handleNext = () => {
-    // Ignore clicks while refresh() is still computing totalPages — otherwise
-    // a fast click during the brief RAF window fires onNext() when totalPages
-    // is still at its reset value of 1 (0 < 0 is false → chapter advance).
+
     if (isMeasuringRef.current || isLoading) return;
     if (currentPage < totalPages - 1) goToPage(currentPage + 1);
     else if (hasNext) onNext();
@@ -565,7 +422,6 @@ export function BookContent({
   return (
     <div ref={containerRef} className="flex flex-col flex-1 overflow-hidden bg-[#fefcf9] min-w-0">
 
-      {/* ── Reading area ────────────────────────────────────────── */}
       <div className="relative flex-1 overflow-hidden">
         {isLoading && (
           <div className="absolute inset-0 z-10 flex items-center justify-center bg-[#fefcf9]">

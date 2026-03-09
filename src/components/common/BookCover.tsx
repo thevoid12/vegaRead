@@ -1,15 +1,10 @@
 interface BookCoverProps {
   title: string;
   author?: string;
-  /** URL or data-URI for the actual cover image */
   coverSrc?: string;
   className?: string;
 }
 
-/**
- * Renders a book cover image, or a deterministically colored placeholder
- * when no cover is available — similar to Foliate's "no cover" treatment.
- */
 export function BookCover({ title, author, coverSrc, className = '' }: BookCoverProps) {
   if (coverSrc) {
     return (
@@ -21,7 +16,6 @@ export function BookCover({ title, author, coverSrc, className = '' }: BookCover
     );
   }
 
-  // Derive a stable hue from the title so every untitled book gets its own color
   const hue = title
     .split('')
     .reduce((acc, ch) => (acc * 31 + ch.charCodeAt(0)) & 0xffff, 0) % 360;
