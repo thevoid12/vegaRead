@@ -27,7 +27,7 @@ jobs:
           draft: true
           prerelease: false
           generate_release_notes: true   # groups commits by PR labels / lists commits
-          body_suffix: |
+          body: |
             ## Downloads
             | Platform | File |
             |---|---|
